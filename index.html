@@ -1,0 +1,3044 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>StitchFlow ERP — Garment Factory Attendance Kiosk & Stock Management</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+
+  <!-- Supabase JS SDK v2 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- jsPDF & jsPDF-AutoTable -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              900: '#1e1b4b',
+            }
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f1f5f9;
+      color: #0f172a;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .font-mono-clock {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    /* Custom scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+    .kiosk-btn-shadow {
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    }
+    .kiosk-btn-shadow:active {
+      transform: translateY(2px);
+    }
+    @keyframes pulse-soft {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.65; }
+    }
+    .animate-pulse-soft {
+      animation: pulse-soft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-slate-100 text-slate-800">
+
+  <!-- ==================== TOAST NOTIFICATION CONTAINER ==================== -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
+
+  <!-- ==================== CUSTOM CONFIRMATION MODAL ==================== -->
+  <div id="confirmModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 border border-slate-200">
+      <div class="flex items-center gap-3 mb-3">
+        <div class="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+          <i class="fa-solid fa-triangle-exclamation text-lg"></i>
+        </div>
+        <h3 id="confirmModalTitle" class="text-lg font-bold text-slate-900">Confirm Action</h3>
+      </div>
+      <p id="confirmModalMessage" class="text-sm text-slate-600 mb-6 leading-relaxed">Are you sure you want to proceed?</p>
+      <div class="flex items-center justify-end gap-3">
+        <button id="confirmCancelBtn" class="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition">
+          Cancel
+        </button>
+        <button id="confirmActionBtn" class="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold text-sm transition shadow-xs">
+          Confirm
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== PIN UNLOCK MODAL ==================== -->
+  <div id="pinModal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 border border-slate-200 text-center">
+      <div class="w-14 h-14 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center mx-auto mb-3 shadow-inner">
+        <i class="fa-solid fa-user-shield text-2xl"></i>
+      </div>
+      <h3 class="text-xl font-extrabold text-slate-900">Manager Access</h3>
+      <p class="text-xs text-slate-500 mt-1">Enter 4-digit security PIN to unlock Stock & Reports</p>
+      <div class="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-xs font-medium">
+        <i class="fa-solid fa-key text-[10px]"></i> Demo Default PIN: <span class="font-mono font-bold">1234</span>
+      </div>
+
+      <!-- PIN Display Dots / Input -->
+      <div class="my-5">
+        <input id="pinInput" type="password" inputmode="numeric" maxlength="6" placeholder="••••"
+          class="w-full text-center text-3xl tracking-[0.5em] font-mono font-bold py-3 px-4 rounded-2xl border-2 border-slate-200 focus:border-indigo-600 focus:outline-none bg-slate-50" />
+        <p id="pinErrorMsg" class="text-xs text-rose-600 font-semibold mt-2 hidden">
+          <i class="fa-solid fa-circle-exclamation mr-1"></i> Incorrect PIN code. Try 1234.
+        </p>
+      </div>
+
+      <!-- Touch Keypad for Factory Phone Convenience -->
+      <div class="grid grid-cols-3 gap-2.5 mb-5">
+        <button type="button" onclick="appendPinDigit('1')" class="py-3 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-indigo-100 font-bold text-lg text-slate-800 transition">1</button>
+        <button type="button" onclick="appendPinDigit('2')" class="py-3 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-indigo-100 font-bold text-lg text-slate-800 transition">2</button>
+        <button type="button" onclick="appendPinDigit('3')" class="py-3 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-indigo-100 font-bold text-lg text-slate-800 transition">3</button>
+        <button type="button" onclick="appendPinDigit('4')" class="py-3 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-indigo-100 font-bold text-lg text-slate-800 transition">4</button>
+        <button type="button" onclick="appendPinDigit('5')" class="py-3 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-indigo-100 font-bold text-lg text-slate-800 transition">5</button>
+        <button type="button" onclick="appendPinDigit('6')" class="py-3 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-indigo-100 font-bold text-lg text-slate-800 transition">6</button>
+        <button type="button" onclick="appendPinDigit('7')" class="py-3 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-indigo-100 font-bold text-lg text-slate-800 transition">7</button>
+        <button type="button" onclick="appendPinDigit('8')" class="py-3 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-indigo-100 font-bold text-lg text-slate-800 transition">8</button>
+        <button type="button" onclick="appendPinDigit('9')" class="py-3 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-indigo-100 font-bold text-lg text-slate-800 transition">9</button>
+        <button type="button" onclick="clearPinInput()" class="py-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-sm transition">Clear</button>
+        <button type="button" onclick="appendPinDigit('0')" class="py-3 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-indigo-100 font-bold text-lg text-slate-800 transition">0</button>
+        <button type="button" onclick="submitPinUnlock()" class="py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm transition">Enter</button>
+      </div>
+
+      <button type="button" onclick="closePinModal()" class="w-full py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 font-semibold text-sm transition">
+        Back to Factory Gate Kiosk
+      </button>
+    </div>
+  </div>
+
+  <!-- ==================== TOP NAVIGATION BAR ==================== -->
+  <header class="bg-slate-900 text-white sticky top-0 z-40 shadow-md border-b border-slate-800">
+    <div class="max-w-7xl mx-auto px-3 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+      
+      <!-- Brand Logo & Title -->
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center shadow-inner shrink-0">
+          <i class="fa-solid fa-shirt text-white text-lg"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="font-extrabold text-base sm:text-lg tracking-tight leading-none">StitchFlow <span class="text-indigo-400">ERP</span></h1>
+            <span class="hidden md:inline-block text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700">Garment Factory</span>
+          </div>
+          <p class="text-xs text-slate-400 mt-0.5">Gate Attendance Kiosk & Stock Control</p>
+        </div>
+      </div>
+
+      <!-- Cloud Status + Mode Switcher -->
+      <div class="flex items-center gap-2 sm:gap-3 flex-wrap">
+        
+        <!-- Cloud Connection Status Badge -->
+        <button id="cloudStatusBadge" onclick="openCloudSetupQuick()" title="Click to configure Supabase Cloud Database"
+          class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold border transition cursor-pointer bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/20">
+          <span id="cloudStatusDot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+          <span id="cloudStatusText">Local Demo Mode (Connect Supabase)</span>
+        </button>
+
+        <!-- Main Mode Switcher -->
+        <div class="bg-slate-800 p-1 rounded-xl flex items-center border border-slate-700">
+          <button id="navKioskBtn" onclick="switchMainMode('kiosk')"
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition bg-indigo-600 text-white shadow-xs">
+            <i class="fa-solid fa-id-card-clip"></i>
+            <span>Gate Kiosk</span>
+          </button>
+          <button id="navManagerBtn" onclick="requestManagerMode()"
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition text-slate-300 hover:text-white">
+            <i id="managerLockIcon" class="fa-solid fa-lock text-xs"></i>
+            <span>Manager Dashboard</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== MAIN CONTENT AREA ==================== -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6">
+
+    <!-- =================================================================== -->
+    <!-- MODULE 1: FACTORY GATE ATTENDANCE KIOSK (PUBLIC PHONE SCREEN)       -->
+    <!-- =================================================================== -->
+    <section id="kioskView" class="space-y-5">
+      
+      <!-- Top Live Clock & Factory Summary Banner -->
+      <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-5 sm:p-6 text-white shadow-xl border border-slate-800">
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          
+          <!-- Digital Clock -->
+          <div class="flex items-center gap-4">
+            <div class="w-14 h-14 rounded-2xl bg-white/10 backdrop-blur-xs flex items-center justify-center border border-white/15 shrink-0">
+              <i class="fa-regular fa-clock text-2xl text-indigo-300"></i>
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span> Gate Terminal Active
+                </span>
+                <span id="kioskDateDisplay" class="text-xs sm:text-sm text-indigo-200 font-medium">Loading date...</span>
+              </div>
+              <div id="kioskTimeDisplay" class="text-3xl sm:text-5xl font-extrabold font-mono-clock tracking-tight text-white mt-1">
+                00:00:00 AM
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Live Factory Counters -->
+          <div class="grid grid-cols-3 gap-2.5 sm:gap-4 bg-white/5 p-3 rounded-2xl border border-white/10">
+            <div class="text-center px-2">
+              <p class="text-[11px] uppercase tracking-wider text-slate-300 font-semibold">Total Staff</p>
+              <p id="kioskStatTotalStaff" class="text-xl sm:text-2xl font-extrabold text-white font-mono-clock">0</p>
+            </div>
+            <div class="text-center px-2 border-x border-white/10">
+              <p class="text-[11px] uppercase tracking-wider text-emerald-300 font-semibold">Inside Now</p>
+              <p id="kioskStatInsideNow" class="text-xl sm:text-2xl font-extrabold text-emerald-400 font-mono-clock">0</p>
+            </div>
+            <div class="text-center px-2">
+              <p class="text-[11px] uppercase tracking-wider text-indigo-300 font-semibold">Today Completed</p>
+              <p id="kioskStatCompletedToday" class="text-xl sm:text-2xl font-extrabold text-indigo-300 font-mono-clock">0</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Kiosk Main Interactive Grid: Left (Select Employee) + Right (Punch Action & Inside List) -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        
+        <!-- LEFT COLUMN (7 cols): Employee Selection Grid & Department Filters -->
+        <div class="lg:col-span-7 bg-white rounded-3xl shadow-xs border border-slate-200 p-4 sm:p-6 flex flex-col">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+            <div>
+              <h2 class="text-lg sm:text-xl font-extrabold text-slate-900 flex items-center gap-2">
+                <span class="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 text-sm flex items-center justify-center font-bold">1</span>
+                Select Your Name / ID
+              </h2>
+              <p class="text-xs text-slate-500">Tap your name card or choose from the dropdown below</p>
+            </div>
+            <!-- Dropdown Quick Selector for fast lookup -->
+            <div class="w-full sm:w-64">
+              <select id="kioskEmployeeDropdown" onchange="selectEmployeeFromDropdown(this.value)"
+                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-slate-50 text-sm font-semibold text-slate-800 focus:outline-none focus:border-indigo-600">
+                <option value="">-- Quick Select Employee --</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Search & Department Filter Pills -->
+          <div class="space-y-3 mb-4">
+            <div class="relative">
+              <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+              <input id="kioskSearchInput" type="text" oninput="renderKioskEmployeeCards()" placeholder="Search worker name or ID (e.g., EMP-101, Rahim, Fatima)..."
+                class="w-full pl-10 pr-9 py-2.5 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-sm focus:outline-none focus:border-indigo-600 transition" />
+              <button onclick="clearKioskSearch()" id="kioskClearSearchBtn" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                <i class="fa-solid fa-circle-xmark"></i>
+              </button>
+            </div>
+
+            <!-- Department Filter Buttons -->
+            <div id="kioskDeptFilterBar" class="flex items-center gap-1.5 overflow-x-auto pb-1">
+              <button onclick="setKioskDeptFilter('ALL')" data-dept="ALL" class="kiosk-dept-btn shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 text-white transition">
+                All Sections
+              </button>
+              <button onclick="setKioskDeptFilter('Cutting')" data-dept="Cutting" class="kiosk-dept-btn shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition">
+                <i class="fa-solid fa-scissors mr-1 text-[10px]"></i> Cutting
+              </button>
+              <button onclick="setKioskDeptFilter('Sewing Line')" data-dept="Sewing Line" class="kiosk-dept-btn shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition">
+                <i class="fa-solid fa-shirt mr-1 text-[10px]"></i> Sewing Line
+              </button>
+              <button onclick="setKioskDeptFilter('Ironing')" data-dept="Ironing" class="kiosk-dept-btn shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition">
+                <i class="fa-solid fa-temperature-high mr-1 text-[10px]"></i> Ironing
+              </button>
+              <button onclick="setKioskDeptFilter('QC')" data-dept="QC" class="kiosk-dept-btn shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition">
+                <i class="fa-solid fa-clipboard-check mr-1 text-[10px]"></i> QC Check
+              </button>
+              <button onclick="setKioskDeptFilter('Packing')" data-dept="Packing" class="kiosk-dept-btn shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition">
+                <i class="fa-solid fa-box-open mr-1 text-[10px]"></i> Packing
+              </button>
+            </div>
+          </div>
+
+          <!-- Touch-Friendly Employee Grid -->
+          <div id="kioskEmployeeGrid" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[410px] overflow-y-auto pr-1">
+            <!-- Dynamically populated by JS -->
+          </div>
+        </div>
+
+        <!-- RIGHT COLUMN (5 cols): Big IN / OUT Punch Panel -->
+        <div class="lg:col-span-5 flex flex-col gap-5">
+          
+          <!-- Step 2: Punch Action Card -->
+          <div class="bg-white rounded-3xl shadow-xs border border-slate-200 p-5 sm:p-6">
+            <h2 class="text-lg sm:text-xl font-extrabold text-slate-900 flex items-center gap-2 mb-4">
+              <span class="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 text-sm flex items-center justify-center font-bold">2</span>
+              Mark Attendance (IN / OUT)
+            </h2>
+
+            <!-- Selected Worker Display Box -->
+            <div id="kioskSelectedWorkerBox" class="rounded-2xl p-4 bg-slate-50 border-2 border-dashed border-slate-300 text-center mb-5 transition">
+              <div id="kioskNoSelectionState" class="py-3">
+                <div class="w-12 h-12 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center mx-auto mb-2">
+                  <i class="fa-solid fa-hand-pointer text-lg"></i>
+                </div>
+                <p class="text-sm font-bold text-slate-700">No Employee Selected</p>
+                <p class="text-xs text-slate-500 mt-0.5">Please tap your name on the left to Clock In or Out</p>
+              </div>
+
+              <div id="kioskActiveSelectionState" class="hidden text-left">
+                <div class="flex items-start justify-between gap-3">
+                  <div class="flex items-center gap-3">
+                    <div id="selectedEmpAvatar" class="w-12 h-12 rounded-2xl bg-indigo-600 text-white font-extrabold text-lg flex items-center justify-center shrink-0">
+                      AA
+                    </div>
+                    <div>
+                      <div class="flex items-center gap-2">
+                        <span id="selectedEmpCode" class="font-mono text-xs font-bold px-2 py-0.5 rounded-md bg-slate-200 text-slate-800">EMP-101</span>
+                        <span id="selectedEmpDept" class="text-xs font-semibold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-700">Sewing Line</span>
+                      </div>
+                      <h3 id="selectedEmpName" class="text-lg font-extrabold text-slate-900 mt-1">Employee Name</h3>
+                    </div>
+                  </div>
+                  <button onclick="clearSelectedEmployee()" class="text-slate-400 hover:text-slate-600 p-1" title="Clear selection">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                  </button>
+                </div>
+
+                <!-- Dynamic Smart Validation Banner -->
+                <div id="selectedEmpStatusBanner" class="mt-3 p-3 rounded-xl text-xs font-semibold flex items-center justify-between">
+                  <!-- Populated dynamically -->
+                </div>
+              </div>
+            </div>
+
+            <!-- HUGE TOUCH-FRIENDLY CLOCK IN & CLOCK OUT BUTTONS -->
+            <div class="grid grid-cols-2 gap-3.5">
+              <button id="btnClockIn" onclick="handleAttendancePunch('IN')"
+                class="kiosk-btn-shadow group relative overflow-hidden rounded-2xl py-6 px-4 bg-gradient-to-b from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white font-extrabold text-center transition flex flex-col items-center justify-center gap-2 disabled:opacity-40 disabled:pointer-events-none">
+                <div class="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center">
+                  <i class="fa-solid fa-right-to-bracket text-2xl"></i>
+                </div>
+                <div>
+                  <span class="block text-lg sm:text-xl tracking-tight">CLOCK IN</span>
+                  <span class="block text-[11px] font-medium text-emerald-100">Start Work Shift</span>
+                </div>
+              </button>
+
+              <button id="btnClockOut" onclick="handleAttendancePunch('OUT')"
+                class="kiosk-btn-shadow group relative overflow-hidden rounded-2xl py-6 px-4 bg-gradient-to-b from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white font-extrabold text-center transition flex flex-col items-center justify-center gap-2 disabled:opacity-40 disabled:pointer-events-none">
+                <div class="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center">
+                  <i class="fa-solid fa-right-from-bracket text-2xl"></i>
+                </div>
+                <div>
+                  <span class="block text-lg sm:text-xl tracking-tight">CLOCK OUT</span>
+                  <span class="block text-[11px] font-medium text-rose-100">Exit & Calculate Hrs</span>
+                </div>
+              </button>
+            </div>
+
+            <!-- Optional Shift Note Input -->
+            <div class="mt-4">
+              <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">Shift / Gate Note (Optional)</label>
+              <input id="kioskPunchNote" type="text" placeholder="e.g., Regular Shift, Morning Line, Overtime..."
+                class="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50 text-xs text-slate-700 focus:outline-none focus:border-indigo-500" />
+            </div>
+          </div>
+
+          <!-- Currently Inside Factory Live Board -->
+          <div class="bg-white rounded-3xl shadow-xs border border-slate-200 p-5 flex-1">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+                <h3 class="font-extrabold text-sm sm:text-base text-slate-900">Currently Inside Factory</h3>
+              </div>
+              <span id="insideBoardCountBadge" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">0 Active</span>
+            </div>
+            <p class="text-xs text-slate-500 mb-3">Tap any worker below to quickly select them for Clock Out:</p>
+            <div id="currentlyInsideList" class="space-y-2 max-h-56 overflow-y-auto pr-1">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Today's Real-Time Gate Activity Log -->
+      <div class="bg-white rounded-3xl shadow-xs border border-slate-200 p-5 sm:p-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+          <div>
+            <h3 class="text-base sm:text-lg font-extrabold text-slate-900 flex items-center gap-2">
+              <i class="fa-solid fa-bolt text-amber-500"></i> Today's Factory Gate Punches
+            </h3>
+            <p class="text-xs text-slate-500">Live chronological record of workers entering and leaving today</p>
+          </div>
+          <span id="todayFeedDateLabel" class="text-xs font-mono font-semibold text-slate-500 bg-slate-100 px-3 py-1 rounded-lg"></span>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                <th class="py-2.5 px-3">Emp ID</th>
+                <th class="py-2.5 px-3">Worker Name</th>
+                <th class="py-2.5 px-3">Department</th>
+                <th class="py-2.5 px-3">Clock In</th>
+                <th class="py-2.5 px-3">Clock Out</th>
+                <th class="py-2.5 px-3">Hours Worked</th>
+                <th class="py-2.5 px-3">Status</th>
+              </tr>
+            </thead>
+            <tbody id="kioskTodayTableBody" class="divide-y divide-slate-100 text-xs sm:text-sm">
+              <!-- Populated by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+
+    <!-- =================================================================== -->
+    <!-- MANAGER DASHBOARD CONTAINER (PIN PROTECTED)                         -->
+    <!-- =================================================================== -->
+    <section id="managerView" class="hidden space-y-6">
+
+      <!-- Manager Sub-Navigation Bar -->
+      <div class="bg-white rounded-2xl shadow-xs border border-slate-200 p-2 sm:p-3 flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-1.5 sm:gap-2 overflow-x-auto">
+          <button onclick="switchManagerTab('attendance')" id="mgrTabBtnAttendance"
+            class="mgr-tab-btn flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition bg-indigo-600 text-white shadow-xs">
+            <i class="fa-solid fa-calendar-check"></i>
+            <span>Attendance & Monthly PDF</span>
+          </button>
+          <button onclick="switchManagerTab('stock')" id="mgrTabBtnStock"
+            class="mgr-tab-btn flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition text-slate-600 hover:bg-slate-100">
+            <i class="fa-solid fa-boxes-stacked"></i>
+            <span>Garment Stock & Analytics</span>
+            <span id="navLowStockBadge" class="hidden px-1.5 py-0.2 rounded-full text-[10px] bg-rose-500 text-white font-extrabold">!</span>
+          </button>
+          <button onclick="switchManagerTab('cloud')" id="mgrTabBtnCloud"
+            class="mgr-tab-btn flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition text-slate-600 hover:bg-slate-100">
+            <i class="fa-solid fa-cloud-arrow-up"></i>
+            <span>Supabase Cloud & SQL Setup</span>
+          </button>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button onclick="lockManagerDashboard()"
+            class="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 transition">
+            <i class="fa-solid fa-lock"></i>
+            <span>Lock & Return to Kiosk</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ================================================================= -->
+      <!-- MODULE 2: ATTENDANCE ADMIN & MONTHLY PDF EXPORT                   -->
+      <!-- ================================================================= -->
+      <div id="mgrSubViewAttendance" class="space-y-6">
+        
+        <!-- KPI Cards -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+          <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Total Employees</span>
+              <span class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center"><i class="fa-solid fa-users"></i></span>
+            </div>
+            <p id="admKpiTotalEmployees" class="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-2 font-mono-clock">0</p>
+            <p class="text-xs text-slate-500 mt-1">Registered across 5 sections</p>
+          </div>
+
+          <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Present Today</span>
+              <span class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center"><i class="fa-solid fa-user-check"></i></span>
+            </div>
+            <p id="admKpiPresentToday" class="text-2xl sm:text-3xl font-extrabold text-emerald-600 mt-2 font-mono-clock">0</p>
+            <p class="text-xs text-slate-500 mt-1">Unique workers clocked in today</p>
+          </div>
+
+          <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Currently Inside</span>
+              <span class="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center"><i class="fa-solid fa-Industry"></i></span>
+            </div>
+            <p id="admKpiCurrentlyInside" class="text-2xl sm:text-3xl font-extrabold text-amber-600 mt-2 font-mono-clock">0</p>
+            <p class="text-xs text-slate-500 mt-1">Active shift on factory floor</p>
+          </div>
+
+          <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Filtered Hours</span>
+              <span class="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center"><i class="fa-solid fa-stopwatch"></i></span>
+            </div>
+            <p id="admKpiFilteredHours" class="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-2 font-mono-clock">0.0</p>
+            <p id="admKpiFilteredCountSub" class="text-xs text-slate-500 mt-1">0 attendance logs in filter</p>
+          </div>
+        </div>
+
+        <!-- Employee Directory & Add New Worker Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          
+          <!-- Add Employee Form (5 cols) -->
+          <div class="lg:col-span-5 bg-white rounded-2xl border border-slate-200 shadow-xs p-5">
+            <h3 class="text-base font-extrabold text-slate-900 flex items-center gap-2 mb-1">
+              <i class="fa-solid fa-user-plus text-indigo-600"></i> Add Factory Employee
+            </h3>
+            <p class="text-xs text-slate-500 mb-4">New workers immediately appear on the Gate Kiosk phone</p>
+
+            <form onsubmit="handleAddEmployee(event)" class="space-y-3">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-bold text-slate-700 mb-1">Full Name *</label>
+                  <input id="newEmpName" type="text" required placeholder="e.g., Abdul Karim"
+                    class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:border-indigo-600" />
+                </div>
+                <div>
+                  <label class="block text-xs font-bold text-slate-700 mb-1">Employee ID *</label>
+                  <input id="newEmpCode" type="text" required placeholder="e.g., EMP-109"
+                    class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-mono focus:outline-none focus:border-indigo-600" />
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-bold text-slate-700 mb-1">Factory Section *</label>
+                  <select id="newEmpDept" required
+                    class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-indigo-600">
+                    <option value="Sewing Line">Sewing Line</option>
+                    <option value="Cutting">Cutting</option>
+                    <option value="Ironing">Ironing</option>
+                    <option value="QC">QC (Quality Control)</option>
+                    <option value="Packing">Packing</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-bold text-slate-700 mb-1">Role / Designation</label>
+                  <input id="newEmpRole" type="text" placeholder="e.g., Machine Operator"
+                    class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:border-indigo-600" />
+                </div>
+              </div>
+
+              <button type="submit"
+                class="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm transition flex items-center justify-center gap-2 shadow-xs">
+                <i class="fa-solid fa-plus"></i> Add Employee to Roster
+              </button>
+            </form>
+          </div>
+
+          <!-- Registered Employees List (7 cols) -->
+          <div class="lg:col-span-7 bg-white rounded-2xl border border-slate-200 shadow-xs p-5 flex flex-col">
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <h3 class="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                  <i class="fa-solid fa-id-badge text-indigo-600"></i> Active Factory Roster
+                </h3>
+                <p class="text-xs text-slate-500">Manage employees across Cutting, Sewing, Ironing, QC & Packing</p>
+              </div>
+              <span id="rosterCountBadge" class="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-mono text-xs font-bold">0 Staff</span>
+            </div>
+
+            <div class="overflow-y-auto max-h-56 border border-slate-100 rounded-xl">
+              <table class="w-full text-left border-collapse">
+                <thead class="bg-slate-50 sticky top-0">
+                  <tr class="text-[11px] font-bold uppercase tracking-wider text-slate-500 border-b border-slate-200">
+                    <th class="py-2 px-3">ID</th>
+                    <th class="py-2 px-3">Name</th>
+                    <th class="py-2 px-3">Section</th>
+                    <th class="py-2 px-3">Role</th>
+                    <th class="py-2 px-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="adminEmployeeRosterBody" class="divide-y divide-slate-100 text-xs sm:text-sm">
+                  <!-- Populated by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Monthly Attendance Report Filter & PDF / CSV Export Panel -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 sm:p-6">
+          <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-slate-200">
+            <div>
+              <h3 class="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                <i class="fa-solid fa-file-pdf text-rose-600"></i> Attendance Register & Monthly PDF Export
+              </h3>
+              <p class="text-xs text-slate-500">Filter by month, date, section, or employee and export printable PDF or Excel/CSV sheets</p>
+            </div>
+
+            <!-- Export Action Buttons -->
+            <div class="flex flex-wrap items-center gap-2.5">
+              <button onclick="exportAttendancePDF()"
+                class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs sm:text-sm shadow-xs transition">
+                <i class="fa-solid fa-file-pdf"></i>
+                <span>Export Monthly PDF Report</span>
+              </button>
+              <button onclick="exportAttendanceCSV()"
+                class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-xs transition">
+                <i class="fa-solid fa-file-excel"></i>
+                <span>Export Attendance CSV / Excel</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Filter Controls -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 my-4">
+            <div>
+              <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Filter Month (YYYY-MM)</label>
+              <input id="attFilterMonth" type="month" onchange="renderAdminAttendanceTable()"
+                class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-indigo-600" />
+            </div>
+            <div>
+              <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Specific Date</label>
+              <input id="attFilterDate" type="date" onchange="renderAdminAttendanceTable()"
+                class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-indigo-600" />
+            </div>
+            <div>
+              <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Employee</label>
+              <select id="attFilterEmployee" onchange="renderAdminAttendanceTable()"
+                class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-indigo-600">
+                <option value="ALL">All Employees</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">Department</label>
+              <select id="attFilterDept" onchange="renderAdminAttendanceTable()"
+                class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-indigo-600">
+                <option value="ALL">All Departments</option>
+                <option value="Cutting">Cutting</option>
+                <option value="Sewing Line">Sewing Line</option>
+                <option value="Ironing">Ironing</option>
+                <option value="QC">QC</option>
+                <option value="Packing">Packing</option>
+              </select>
+            </div>
+            <div class="flex items-end gap-2">
+              <button onclick="resetAttendanceFilters()"
+                class="w-full py-2 px-3 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 font-semibold text-xs sm:text-sm transition">
+                <i class="fa-solid fa-rotate-left mr-1"></i> Reset Filters
+              </button>
+            </div>
+          </div>
+
+          <!-- Attendance Table -->
+          <div class="overflow-x-auto border border-slate-200 rounded-2xl">
+            <table class="w-full text-left border-collapse">
+              <thead class="bg-slate-50 border-b border-slate-200">
+                <tr class="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <th class="py-3 px-3.5">Date</th>
+                  <th class="py-3 px-3.5">Emp ID</th>
+                  <th class="py-3 px-3.5">Employee Name</th>
+                  <th class="py-3 px-3.5">Department</th>
+                  <th class="py-3 px-3.5">Time In</th>
+                  <th class="py-3 px-3.5">Time Out</th>
+                  <th class="py-3 px-3.5">Total Hours</th>
+                  <th class="py-3 px-3.5">Status</th>
+                  <th class="py-3 px-3.5 text-right">Manage</th>
+                </tr>
+              </thead>
+              <tbody id="adminAttendanceTableBody" class="divide-y divide-slate-100 text-xs sm:text-sm">
+                <!-- Populated by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- ================================================================= -->
+      <!-- MODULE 3: GARMENT STOCK MANAGEMENT & ANALYTICS                    -->
+      <!-- ================================================================= -->
+      <div id="mgrSubViewStock" class="hidden space-y-6">
+
+        <!-- Stock KPI Summary Row -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+          <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Total Stock SKUs</span>
+              <span class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center"><i class="fa-solid fa-layer-group"></i></span>
+            </div>
+            <p id="stkKpiTotalItems" class="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-2 font-mono-clock">0</p>
+            <p class="text-xs text-slate-500 mt-1">Fabrics, Threads, Trims & Packing</p>
+          </div>
+
+          <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Stock IN Entries</span>
+              <span class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center"><i class="fa-solid fa-arrow-trend-up"></i></span>
+            </div>
+            <p id="stkKpiTotalInCount" class="text-2xl sm:text-3xl font-extrabold text-emerald-600 mt-2 font-mono-clock">0</p>
+            <p class="text-xs text-slate-500 mt-1">Received supplier batches</p>
+          </div>
+
+          <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Stock OUT Issued</span>
+              <span class="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center"><i class="fa-solid fa-dolly"></i></span>
+            </div>
+            <p id="stkKpiTotalOutCount" class="text-2xl sm:text-3xl font-extrabold text-amber-600 mt-2 font-mono-clock">0</p>
+            <p class="text-xs text-slate-500 mt-1">Issued to Cutting / Sewing lines</p>
+          </div>
+
+          <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Low Stock Alerts</span>
+              <span class="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center"><i class="fa-solid fa-bell"></i></span>
+            </div>
+            <p id="stkKpiLowStockCount" class="text-2xl sm:text-3xl font-extrabold text-rose-600 mt-2 font-mono-clock">0</p>
+            <p class="text-xs text-slate-500 mt-1">Items below minimum threshold</p>
+          </div>
+        </div>
+
+        <!-- Forms Row: Record Stock IN/OUT (7 cols) + Add New Inventory Item (5 cols) -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          
+          <!-- Record Stock IN / Stock OUT Form -->
+          <div class="lg:col-span-7 bg-white rounded-2xl border border-slate-200 shadow-xs p-5 sm:p-6">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+              <div>
+                <h3 class="text-base sm:text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                  <i class="fa-solid fa-right-left text-indigo-600"></i> Record Stock IN / Stock OUT
+                </h3>
+                <p class="text-xs text-slate-500">Log incoming supplier materials or issue stock to production lines</p>
+              </div>
+              <!-- Transaction Type Toggle -->
+              <div class="grid grid-cols-2 bg-slate-100 p-1 rounded-xl border border-slate-200">
+                <button type="button" id="btnModeStockIn" onclick="setStockMoveFormType('IN')"
+                  class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition bg-emerald-600 text-white shadow-xs">
+                  <i class="fa-solid fa-plus mr-1"></i> STOCK IN (+)
+                </button>
+                <button type="button" id="btnModeStockOut" onclick="setStockMoveFormType('OUT')"
+                  class="px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition text-slate-600 hover:text-slate-900">
+                  <i class="fa-solid fa-minus mr-1"></i> STOCK OUT (-)
+                </button>
+              </div>
+            </div>
+
+            <form onsubmit="handleRecordStockMovement(event)" class="space-y-4">
+              <input type="hidden" id="stockMoveType" value="IN" />
+
+              <div class="grid grid-cols-1 sm:grid-cols-12 gap-3.5">
+                <div class="sm:col-span-7">
+                  <label class="block text-xs font-bold text-slate-700 mb-1">Select Garment Item *</label>
+                  <select id="stockMoveItemSelect" required onchange="updateSelectedStockItemPreview()"
+                    class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm bg-white font-semibold focus:outline-none focus:border-indigo-600">
+                    <option value="">-- Choose Item --</option>
+                  </select>
+                </div>
+
+                <div class="sm:col-span-5">
+                  <label class="block text-xs font-bold text-slate-700 mb-1">Quantity <span id="stockMoveUnitHint" class="text-indigo-600"></span> *</label>
+                  <input id="stockMoveQty" type="number" step="0.01" min="0.01" required placeholder="Enter quantity..."
+                    class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-mono font-bold focus:outline-none focus:border-indigo-600" />
+                </div>
+              </div>
+
+              <!-- Live Available Balance Info Pill -->
+              <div id="stockMoveBalanceBanner" class="hidden px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs flex items-center justify-between">
+                <span class="text-slate-600 font-medium">Available Balance in Store:</span>
+                <span id="stockMoveAvailableText" class="font-mono font-extrabold text-slate-900">0</span>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-12 gap-3.5">
+                <div class="sm:col-span-4">
+                  <label class="block text-xs font-bold text-slate-700 mb-1">Date *</label>
+                  <input id="stockMoveDate" type="date" required
+                    class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-indigo-600" />
+                </div>
+                <div class="sm:col-span-8">
+                  <label class="block text-xs font-bold text-slate-700 mb-1">Reference / Production Line Note *</label>
+                  <input id="stockMoveNote" type="text" required placeholder="e.g., Supplier Batch #18 or Issued to Cutting Table 2"
+                    class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:border-indigo-600" />
+                </div>
+              </div>
+
+              <!-- Quick Preset Reference Chips -->
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <span class="text-[11px] font-semibold text-slate-400 mr-1">Quick Notes:</span>
+                <button type="button" onclick="setQuickStockNote('Supplier Shipment Received')" class="text-[11px] px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition">+ Supplier Shipment</button>
+                <button type="button" onclick="setQuickStockNote('Issued to Cutting Table #1')" class="text-[11px] px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition">→ Cutting Table #1</button>
+                <button type="button" onclick="setQuickStockNote('Issued to Sewing Line A')" class="text-[11px] px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition">→ Sewing Line A</button>
+                <button type="button" onclick="setQuickStockNote('Issued to Packing & Finishing')" class="text-[11px] px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition">→ Packing Section</button>
+              </div>
+
+              <button id="stockMoveSubmitBtn" type="submit"
+                class="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm transition flex items-center justify-center gap-2 shadow-xs">
+                <i class="fa-solid fa-circle-plus"></i>
+                <span id="stockMoveSubmitText">Record Stock IN (+ Add to Inventory)</span>
+              </button>
+            </form>
+          </div>
+
+          <!-- Add New Inventory Item (Master SKU) -->
+          <div class="lg:col-span-5 bg-white rounded-2xl border border-slate-200 shadow-xs p-5 sm:p-6">
+            <h3 class="text-base sm:text-lg font-extrabold text-slate-900 flex items-center gap-2 mb-1">
+              <i class="fa-solid fa-box-archive text-indigo-600"></i> Add New Stock Item (Master)
+            </h3>
+            <p class="text-xs text-slate-500 mb-4">Register new fabric rolls, threads, trims, polybags, or finished goods</p>
+
+            <form onsubmit="handleAddStockItem(event)" class="space-y-3.5">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Item Name / Description *</label>
+                <input id="newItemName" type="text" required placeholder="e.g., Cotton Twill Fabric Black"
+                  class="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:border-indigo-600" />
+              </div>
+
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-bold text-slate-700 mb-1">Category *</label>
+                  <select id="newItemCategory" required
+                    class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-indigo-600">
+                    <option value="Fabric">Fabric</option>
+                    <option value="Thread">Thread</option>
+                    <option value="Trims">Trims & Zippers</option>
+                    <option value="Packaging">Packaging</option>
+                    <option value="Finished Garments">Finished Garments</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-bold text-slate-700 mb-1">Unit *</label>
+                  <select id="newItemUnit" required
+                    class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm bg-white focus:outline-none focus:border-indigo-600">
+                    <option value="Meters">Meters</option>
+                    <option value="Yards">Yards</option>
+                    <option value="Rolls">Rolls</option>
+                    <option value="Cones">Cones</option>
+                    <option value="Pcs">Pieces (Pcs)</option>
+                    <option value="Boxes">Boxes</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-bold text-slate-700 mb-1">Min Alert Level *</label>
+                  <input id="newItemMinAlert" type="number" step="1" min="0" value="50" required
+                    class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-mono focus:outline-none focus:border-indigo-600" />
+                </div>
+                <div>
+                  <label class="block text-xs font-bold text-slate-700 mb-1">Opening Stock (Optional)</label>
+                  <input id="newItemInitialQty" type="number" step="0.01" min="0" value="0"
+                    class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-mono focus:outline-none focus:border-indigo-600" />
+                </div>
+              </div>
+
+              <button type="submit"
+                class="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm transition flex items-center justify-center gap-2 shadow-xs mt-2">
+                <i class="fa-solid fa-plus"></i> Create Inventory Item
+              </button>
+            </form>
+          </div>
+
+        </div>
+
+        <!-- INTERACTIVE CHART.JS ANALYTICS SECTION -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          
+          <!-- Bar Chart: Total Stock IN vs Total Stock OUT vs Current Balance (8 cols) -->
+          <div class="lg:col-span-8 bg-white rounded-2xl border border-slate-200 shadow-xs p-5 sm:p-6">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+              <div>
+                <h3 class="text-base sm:text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                  <i class="fa-solid fa-chart-column text-indigo-600"></i> Stock Flow Analysis (Total IN vs OUT vs Balance)
+                </h3>
+                <p class="text-xs text-slate-500">Visual comparison of cumulative stock received, issued to production, and remaining balance</p>
+              </div>
+              <select id="chartCategoryFilter" onchange="updateStockCharts()"
+                class="px-3 py-1.5 rounded-xl border border-slate-300 text-xs font-bold bg-slate-50 text-slate-700 focus:outline-none">
+                <option value="ALL">All Categories</option>
+                <option value="Fabric">Fabric Only</option>
+                <option value="Thread">Thread Only</option>
+                <option value="Trims">Trims Only</option>
+                <option value="Packaging">Packaging Only</option>
+                <option value="Finished Garments">Finished Garments</option>
+              </select>
+            </div>
+            <div class="relative h-72 sm:h-80 w-full">
+              <canvas id="stockBarChart"></canvas>
+            </div>
+          </div>
+
+          <!-- Doughnut Chart + Low Stock Alert Watchlist (4 cols) -->
+          <div class="lg:col-span-4 bg-white rounded-2xl border border-slate-200 shadow-xs p-5 sm:p-6 flex flex-col justify-between">
+            <div>
+              <h3 class="text-base font-extrabold text-slate-900 flex items-center gap-2 mb-1">
+                <i class="fa-solid fa-chart-pie text-indigo-600"></i> Inventory Health & Alerts
+              </h3>
+              <p class="text-xs text-slate-500 mb-3">SKUs by category & reorder watchlist</p>
+              <div class="relative h-44 w-full flex items-center justify-center">
+                <canvas id="stockDoughnutChart"></canvas>
+              </div>
+            </div>
+
+            <!-- Low Stock Alert List -->
+            <div class="mt-4 pt-3 border-t border-slate-100">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-extrabold uppercase tracking-wider text-rose-600 flex items-center gap-1.5">
+                  <i class="fa-solid fa-triangle-exclamation"></i> Low Stock Watchlist
+                </span>
+                <span id="watchlistCountLabel" class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">0 Items</span>
+              </div>
+              <div id="lowStockWatchlistContainer" class="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                <!-- Populated by JS -->
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- STOCK DATA SHEETS & EXPORT CENTER (SUMMARY SHEET + MOVEMENT LEDGER) -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 sm:p-6">
+          
+          <!-- Header & Export Buttons -->
+          <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-slate-200">
+            <div>
+              <h3 class="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                <i class="fa-solid fa-table-list text-indigo-600"></i> Garment Stock Data Sheets & Reports
+              </h3>
+              <p class="text-xs text-slate-500">Complete Stock In, Stock Out, and Current Balance data sheet with 1-click PDF & Excel/CSV export</p>
+            </div>
+
+            <!-- Stock Export Buttons -->
+            <div class="flex flex-wrap items-center gap-2">
+              <button onclick="exportStockPDFReport()"
+                class="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition">
+                <i class="fa-solid fa-file-pdf"></i>
+                <span>Export Stock PDF Report</span>
+              </button>
+              <button onclick="exportStockSummaryCSV()"
+                class="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition">
+                <i class="fa-solid fa-file-csv"></i>
+                <span>Summary Sheet (CSV/Excel)</span>
+              </button>
+              <button onclick="exportStockMovementsCSV()"
+                class="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs shadow-xs transition">
+                <i class="fa-solid fa-clock-rotate-left"></i>
+                <span>Movement History (CSV/Excel)</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Sheet Switcher Tabs + Search Bar -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 my-4">
+            <div class="inline-flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <button id="tabBtnStockSummary" onclick="switchStockSheetTab('summary')"
+                class="px-4 py-2 rounded-lg text-xs font-extrabold transition bg-white text-indigo-600 shadow-xs">
+                1. Item Summary Sheet (In / Out / Balance)
+              </button>
+              <button id="tabBtnStockLedger" onclick="switchStockSheetTab('ledger')"
+                class="px-4 py-2 rounded-lg text-xs font-extrabold transition text-slate-600 hover:text-slate-900">
+                2. Stock Movement Ledger (In/Out Log)
+              </button>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <div class="relative w-full sm:w-64">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                <input id="stockTableSearch" type="text" oninput="renderStockTables()" placeholder="Search item, category, note..."
+                  class="w-full pl-8 pr-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:border-indigo-600" />
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 1: ITEM SUMMARY DATA SHEET -->
+          <div id="stockSummarySheetContainer" class="overflow-x-auto border border-slate-200 rounded-2xl">
+            <table class="w-full text-left border-collapse">
+              <thead class="bg-slate-50 border-b border-slate-200">
+                <tr class="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <th class="py-3 px-3.5">Item Name</th>
+                  <th class="py-3 px-3.5">Category</th>
+                  <th class="py-3 px-3.5">Unit</th>
+                  <th class="py-3 px-3.5 text-emerald-700 bg-emerald-50/50">Total Stock IN (+)</th>
+                  <th class="py-3 px-3.5 text-amber-700 bg-amber-50/50">Total Stock OUT (-)</th>
+                  <th class="py-3 px-3.5 text-indigo-900 bg-indigo-50/60">Current Balance</th>
+                  <th class="py-3 px-3.5">Min Alert</th>
+                  <th class="py-3 px-3.5">Status</th>
+                  <th class="py-3 px-3.5 text-right">Quick Action</th>
+                </tr>
+              </thead>
+              <tbody id="stockSummaryTableBody" class="divide-y divide-slate-100 text-xs sm:text-sm">
+                <!-- Populated by JS -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- TAB 2: CHRONOLOGICAL STOCK MOVEMENT LEDGER -->
+          <div id="stockLedgerSheetContainer" class="hidden overflow-x-auto border border-slate-200 rounded-2xl">
+            <table class="w-full text-left border-collapse">
+              <thead class="bg-slate-50 border-b border-slate-200">
+                <tr class="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <th class="py-3 px-3.5">Date & Time</th>
+                  <th class="py-3 px-3.5">Item Name</th>
+                  <th class="py-3 px-3.5">Category</th>
+                  <th class="py-3 px-3.5">Type</th>
+                  <th class="py-3 px-3.5">Quantity</th>
+                  <th class="py-3 px-3.5">Reference / Production Note</th>
+                  <th class="py-3 px-3.5 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody id="stockLedgerTableBody" class="divide-y divide-slate-100 text-xs sm:text-sm">
+                <!-- Populated by JS -->
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+
+
+      <!-- ================================================================= -->
+      <!-- MODULE 4: SUPABASE CLOUD SETUP & SQL SCHEMA                       -->
+      <!-- ================================================================= -->
+      <div id="mgrSubViewCloud" class="hidden space-y-6">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          
+          <!-- Left: Supabase Credentials & Sync Controls (5 cols) -->
+          <div class="lg:col-span-5 bg-white rounded-2xl border border-slate-200 shadow-xs p-5 sm:p-6 space-y-5">
+            <div>
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 mb-2">
+                <i class="fa-solid fa-database"></i> Free Cloud Database Sync
+              </span>
+              <h3 class="text-lg font-extrabold text-slate-900">Connect Supabase Cloud</h3>
+              <p class="text-xs text-slate-500 mt-1 leading-relaxed">
+                Host this single HTML file on <strong>GitHub Pages</strong> for free. Connect a free <strong>Supabase</strong> project so punches on the factory gate phone sync live to your manager laptop or phone anywhere.
+              </p>
+            </div>
+
+            <form onsubmit="handleSaveSupabaseConfig(event)" class="space-y-3.5">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Supabase Project URL</label>
+                <input id="sbUrlInput" type="url" placeholder="https://xyzcompany.supabase.co"
+                  class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-mono focus:outline-none focus:border-indigo-600" />
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Supabase Anon Public Key</label>
+                <input id="sbKeyInput" type="password" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm font-mono focus:outline-none focus:border-indigo-600" />
+              </div>
+
+              <div class="flex flex-col sm:flex-row gap-2.5 pt-2">
+                <button type="submit"
+                  class="flex-1 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2 shadow-xs">
+                  <i class="fa-solid fa-plug-circle-check"></i> Save & Connect Cloud
+                </button>
+                <button type="button" onclick="disconnectSupabaseConfig()"
+                  class="py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs sm:text-sm transition">
+                  Use Local Mode
+                </button>
+              </div>
+            </form>
+
+            <!-- Sync Local Data to Cloud / Reset Demo Data -->
+            <div class="pt-4 border-t border-slate-200 space-y-3">
+              <h4 class="text-xs font-extrabold uppercase tracking-wider text-slate-400">Data Utilities & Security</h4>
+              
+              <button type="button" onclick="pushLocalDataToSupabase()"
+                class="w-full py-2.5 px-4 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-xs sm:text-sm transition flex items-center justify-center gap-2">
+                <i class="fa-solid fa-cloud-arrow-up"></i> Push Current Local Data to Supabase Tables
+              </button>
+
+              <!-- Change Manager PIN -->
+              <div class="flex items-center gap-2 pt-2">
+                <input id="customPinInput" type="text" maxlength="6" placeholder="New Manager PIN (Default: 1234)"
+                  class="flex-1 px-3 py-2 rounded-xl border border-slate-300 text-xs font-mono" />
+                <button type="button" onclick="updateManagerPin()"
+                  class="px-3.5 py-2 rounded-xl bg-slate-800 text-white text-xs font-bold hover:bg-slate-900 transition">
+                  Update PIN
+                </button>
+              </div>
+
+              <button type="button" onclick="resetDemoFactoryData()"
+                class="w-full py-2 px-4 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 font-semibold text-xs transition flex items-center justify-center gap-2">
+                <i class="fa-solid fa-rotate"></i> Reset Local Demo Data to Factory Defaults
+              </button>
+            </div>
+          </div>
+
+          <!-- Right: Copy-Pasteable SQL Schema Block (7 cols) -->
+          <div class="lg:col-span-7 bg-slate-900 text-slate-100 rounded-2xl shadow-lg p-5 sm:p-6 flex flex-col justify-between border border-slate-800">
+            <div>
+              <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <div>
+                  <h3 class="text-base sm:text-lg font-extrabold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-terminal text-emerald-400"></i> 1-Click Supabase SQL Schema
+                  </h3>
+                  <p class="text-xs text-slate-400">Copy and run this inside your Supabase project's <strong>SQL Editor</strong> to create all 4 factory tables</p>
+                </div>
+                <button onclick="copySqlSchemaToClipboard()"
+                  class="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-extrabold text-xs transition shadow-xs">
+                  <i class="fa-regular fa-copy"></i>
+                  <span id="copySqlBtnText">Copy SQL Schema</span>
+                </button>
+              </div>
+
+              <pre id="sqlSchemaCodeBlock" class="bg-slate-950 text-emerald-300 font-mono text-[11px] sm:text-xs p-4 rounded-xl overflow-x-auto max-h-[380px] border border-slate-800 leading-relaxed select-all">-- Run this inside Supabase SQL Editor (100% Free Tier Compatible)
+
+CREATE TABLE IF NOT EXISTS employees (
+  id TEXT PRIMARY KEY,
+  emp_code TEXT NOT NULL,
+  name TEXT NOT NULL,
+  department TEXT NOT NULL,
+  role TEXT DEFAULT 'Operator',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS attendance_logs (
+  id TEXT PRIMARY KEY,
+  employee_id TEXT NOT NULL,
+  emp_code TEXT NOT NULL,
+  employee_name TEXT NOT NULL,
+  department TEXT NOT NULL,
+  date TEXT NOT NULL,
+  time_in TIMESTAMPTZ NOT NULL,
+  time_out TIMESTAMPTZ,
+  hours_worked NUMERIC DEFAULT 0,
+  note TEXT DEFAULT '',
+  status TEXT DEFAULT 'INSIDE'
+);
+
+CREATE TABLE IF NOT EXISTS stock_items (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  category TEXT NOT NULL,
+  unit TEXT NOT NULL,
+  min_stock NUMERIC DEFAULT 10,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS stock_movements (
+  id TEXT PRIMARY KEY,
+  item_id TEXT NOT NULL,
+  item_name TEXT NOT NULL,
+  category TEXT NOT NULL,
+  unit TEXT NOT NULL,
+  type TEXT NOT NULL, -- 'IN' or 'OUT'
+  quantity NUMERIC NOT NULL,
+  date TEXT NOT NULL,
+  timestamp TIMESTAMPTZ DEFAULT NOW(),
+  note TEXT DEFAULT ''
+);
+
+-- Enable public read/write policies for Factory Gate Kiosk & Manager App
+ALTER TABLE employees ENABLE ROW LEVEL SECURITY;
+ALTER TABLE attendance_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE stock_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE stock_movements ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public factory access employees" ON employees FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public factory access attendance" ON attendance_logs FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public factory access stock_items" ON stock_items FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public factory access stock_movements" ON stock_movements FOR ALL USING (true) WITH CHECK (true);</pre>
+            </div>
+
+            <div class="mt-4 p-3.5 rounded-xl bg-slate-800/90 border border-slate-700 text-xs text-slate-300 flex items-start gap-3">
+              <i class="fa-brands fa-github text-lg text-white mt-0.5"></i>
+              <div>
+                <p class="font-bold text-white">How to Host on GitHub Pages for Free:</p>
+                <ol class="list-decimal list-inside space-y-0.5 text-slate-300 mt-1">
+                  <li>Upload this single <code class="text-amber-300">index.html</code> file to a new GitHub repository.</li>
+                  <li>Go to <strong>Settings &rarr; Pages</strong> and select <strong>Deploy from branch (main)</strong>.</li>
+                  <li>Open your live link on the factory entrance phone and bookmark it to the home screen!</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- ==================== FOOTER ==================== -->
+  <footer class="bg-white border-t border-slate-200 mt-8 py-4 px-4 text-center text-xs text-slate-500">
+    <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+      <p><strong>StitchFlow Garment Factory ERP</strong> — Attendance Kiosk & Stock Analytics</p>
+      <p>Works Offline (LocalStorage) &bull; Cloud-Ready with Supabase &bull; GitHub Pages Ready</p>
+    </div>
+  </footer>
+
+
+  <!-- ==================== APPLICATION JAVASCRIPT ==================== -->
+  <script>
+    /*************************************************************************
+     * 1. STATE & STORAGE KEYS
+     *************************************************************************/
+    const STORAGE_KEYS = {
+      EMPLOYEES: 'gf_erp_employees_v1',
+      ATTENDANCE: 'gf_erp_attendance_v1',
+      STOCK_ITEMS: 'gf_erp_stock_items_v1',
+      STOCK_MOVEMENTS: 'gf_erp_stock_movements_v1',
+      SB_URL: 'gf_erp_supabase_url',
+      SB_KEY: 'gf_erp_supabase_key',
+      MANAGER_PIN: 'gf_erp_manager_pin'
+    };
+
+    let employees = [];
+    let attendanceLogs = [];
+    let stockItems = [];
+    let stockMovements = [];
+
+    // Kiosk UI state
+    let selectedKioskEmployeeId = '';
+    let selectedKioskDeptFilter = 'ALL';
+
+    // Manager Auth & Navigation state
+    let isManagerUnlocked = false;
+    let activeMainMode = 'kiosk'; // 'kiosk' or 'manager'
+    let activeManagerTab = 'attendance'; // 'attendance', 'stock', 'cloud'
+    let pendingManagerTabAfterUnlock = 'attendance';
+
+    // Supabase Client state
+    let supabaseClient = null;
+    let isCloudConnected = false;
+
+    // Chart.js instances
+    let stockBarChartInstance = null;
+    let stockDoughnutChartInstance = null;
+
+    /*************************************************************************
+     * 2. DATE & TIME HELPERS
+     *************************************************************************/
+    function getTodayDateString() {
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+
+    function getCurrentMonthString() {
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      return `${yyyy}-${mm}`;
+    }
+
+    function formatTimeAMPM(isoString) {
+      if (!isoString) return '—';
+      const d = new Date(isoString);
+      if (isNaN(d.getTime())) return '—';
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+    }
+
+    function formatShortTimeAMPM(isoString) {
+      if (!isoString) return '—';
+      const d = new Date(isoString);
+      if (isNaN(d.getTime())) return '—';
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+    }
+
+    function calculateHoursBetween(startIso, endIso) {
+      if (!startIso || !endIso) return 0;
+      const start = new Date(startIso).getTime();
+      const end = new Date(endIso).getTime();
+      if (isNaN(start) || isNaN(end) || end <= start) return 0;
+      const diffHours = (end - start) / (1000 * 60 * 60);
+      return Math.round(diffHours * 100) / 100;
+    }
+
+    function formatElapsedDuration(startIso) {
+      const start = new Date(startIso).getTime();
+      const now = Date.now();
+      const diffMinutes = Math.max(1, Math.floor((now - start) / 60000));
+      const hrs = Math.floor(diffMinutes / 60);
+      const mins = diffMinutes % 60;
+      return hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+    }
+
+    function getInitials(name) {
+      if (!name) return 'WK';
+      const parts = name.trim().split(/\s+/);
+      if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+
+    /*************************************************************************
+     * 3. TOAST & CUSTOM MODAL HELPERS (NO ALERT / CONFIRM)
+     *************************************************************************/
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+
+      const styles = {
+        success: 'bg-slate-900 border-emerald-500 text-white',
+        error: 'bg-rose-950 border-rose-500 text-white',
+        warning: 'bg-amber-950 border-amber-500 text-white',
+        info: 'bg-indigo-950 border-indigo-400 text-white'
+      };
+      const icons = {
+        success: '<i class="fa-solid fa-circle-check text-emerald-400 text-lg"></i>',
+        error: '<i class="fa-solid fa-circle-exclamation text-rose-400 text-lg"></i>',
+        warning: '<i class="fa-solid fa-triangle-exclamation text-amber-400 text-lg"></i>',
+        info: '<i class="fa-solid fa-circle-info text-indigo-400 text-lg"></i>'
+      };
+
+      toast.className = `pointer-events-auto flex items-center gap-3 px-4 py-3.5 rounded-2xl shadow-xl border-l-4 ${styles[type] || styles.success} transition-all duration-300`;
+      toast.innerHTML = `
+        ${icons[type] || icons.success}
+        <div class="text-xs sm:text-sm font-semibold leading-snug flex-1">${message}</div>
+      `;
+
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(8px)';
+        setTimeout(() => toast.remove(), 300);
+      }, 3600);
+    }
+
+    function openConfirmModal(title, message, onConfirmCallback) {
+      const modal = document.getElementById('confirmModal');
+      document.getElementById('confirmModalTitle').textContent = title;
+      document.getElementById('confirmModalMessage').textContent = message;
+
+      const cancelBtn = document.getElementById('confirmCancelBtn');
+      const actionBtn = document.getElementById('confirmActionBtn');
+
+      const closeModal = () => {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      };
+
+      cancelBtn.onclick = closeModal;
+      actionBtn.onclick = () => {
+        closeModal();
+        onConfirmCallback();
+      };
+
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    /*************************************************************************
+     * 4. REALISTIC PRE-LOADED GARMENT FACTORY DEMO DATA
+     *************************************************************************/
+    function seedDefaultFactoryData() {
+      const today = getTodayDateString();
+      const yesterdayDate = new Date(Date.now() - 86400000);
+      const yesterday = `${yesterdayDate.getFullYear()}-${String(yesterdayDate.getMonth() + 1).padStart(2, '0')}-${String(yesterdayDate.getDate()).padStart(2, '0')}`;
+
+      employees = [
+        { id: 'emp_1', emp_code: 'EMP-101', name: 'Rahim Uddin', department: 'Cutting', role: 'Master Cutter' },
+        { id: 'emp_2', emp_code: 'EMP-102', name: 'Fatima Begum', department: 'Sewing Line', role: 'Senior Lockstitch Operator' },
+        { id: 'emp_3', emp_code: 'EMP-103', name: 'Kamal Hossain', department: 'Sewing Line', role: 'Overlock Operator' },
+        { id: 'emp_4', emp_code: 'EMP-104', name: 'Nasrin Akter', department: 'Sewing Line', role: 'Flatlock Operator' },
+        { id: 'emp_5', emp_code: 'EMP-105', name: 'Tariqul Islam', department: 'Ironing', role: 'Steam Press Finishing' },
+        { id: 'emp_6', emp_code: 'EMP-106', name: 'Salma Khatun', department: 'QC', role: 'Final Quality Inspector' },
+        { id: 'emp_7', emp_code: 'EMP-107', name: 'Jahangir Alam', department: 'Packing', role: 'Folding & Polybag Lead' },
+        { id: 'emp_8', emp_code: 'EMP-108', name: 'Sharmin Sultana', department: 'Cutting', role: 'Pattern & Marker Assistant' }
+      ];
+
+      // Create realistic timestamps for today and yesterday
+      const today8am = new Date(`${today}T08:00:00`).toISOString();
+      const today815am = new Date(`${today}T08:15:00`).toISOString();
+      const today830am = new Date(`${today}T08:30:00`).toISOString();
+      const today1pm = new Date(`${today}T13:00:00`).toISOString();
+
+      const yest8am = new Date(`${yesterday}T08:00:00`).toISOString();
+      const yest5pm = new Date(`${yesterday}T17:00:00`).toISOString();
+      const yest810am = new Date(`${yesterday}T08:10:00`).toISOString();
+      const yest540pm = new Date(`${yesterday}T17:40:00`).toISOString();
+
+      attendanceLogs = [
+        // Yesterday completed logs
+        {
+          id: 'att_1',
+          employee_id: 'emp_1',
+          emp_code: 'EMP-101',
+          employee_name: 'Rahim Uddin',
+          department: 'Cutting',
+          date: yesterday,
+          time_in: yest8am,
+          time_out: yest5pm,
+          hours_worked: 9.0,
+          note: 'Regular Shift',
+          status: 'COMPLETED'
+        },
+        {
+          id: 'att_2',
+          employee_id: 'emp_2',
+          emp_code: 'EMP-102',
+          employee_name: 'Fatima Begum',
+          department: 'Sewing Line',
+          date: yesterday,
+          time_in: yest810am,
+          time_out: yest540pm,
+          hours_worked: 9.5,
+          note: 'Line A Shift + OT',
+          status: 'COMPLETED'
+        },
+        // Today's active & completed logs
+        {
+          id: 'att_3',
+          employee_id: 'emp_1',
+          emp_code: 'EMP-101',
+          employee_name: 'Rahim Uddin',
+          department: 'Cutting',
+          date: today,
+          time_in: today8am,
+          time_out: null,
+          hours_worked: 0,
+          note: 'Morning Cutting Batch',
+          status: 'INSIDE'
+        },
+        {
+          id: 'att_4',
+          employee_id: 'emp_2',
+          emp_code: 'EMP-102',
+          employee_name: 'Fatima Begum',
+          department: 'Sewing Line',
+          date: today,
+          time_in: today815am,
+          time_out: null,
+          hours_worked: 0,
+          note: 'Sewing Line 1',
+          status: 'INSIDE'
+        },
+        {
+          id: 'att_5',
+          employee_id: 'emp_6',
+          emp_code: 'EMP-106',
+          employee_name: 'Salma Khatun',
+          department: 'QC',
+          date: today,
+          time_in: today830am,
+          time_out: null,
+          hours_worked: 0,
+          note: 'Buyer Inspection Prep',
+          status: 'INSIDE'
+        },
+        {
+          id: 'att_6',
+          employee_id: 'emp_5',
+          emp_code: 'EMP-105',
+          employee_name: 'Tariqul Islam',
+          department: 'Ironing',
+          date: today,
+          time_in: today8am,
+          time_out: today1pm,
+          hours_worked: 5.0,
+          note: 'Half-Day Morning Shift',
+          status: 'COMPLETED'
+        }
+      ];
+
+      stockItems = [
+        { id: 'stk_1', name: 'Cotton Poplin Fabric (White)', category: 'Fabric', unit: 'Meters', min_stock: 200 },
+        { id: 'stk_2', name: 'Indigo Denim Roll (12 oz)', category: 'Fabric', unit: 'Meters', min_stock: 150 },
+        { id: 'stk_3', name: 'Polyester Sewing Thread 40/2', category: 'Thread', unit: 'Cones', min_stock: 80 },
+        { id: 'stk_4', name: 'YKK Metal Zippers 7-inch', category: 'Trims', unit: 'Pcs', min_stock: 500 },
+        { id: 'stk_5', name: 'Main Woven Brand & Care Labels', category: 'Trims', unit: 'Pcs', min_stock: 1000 },
+        { id: 'stk_6', name: 'Self-Adhesive Garment Polybags', category: 'Packaging', unit: 'Pcs', min_stock: 400 },
+        { id: 'stk_7', name: 'Export Men Casual Shirt (Finished)', category: 'Finished Garments', unit: 'Pcs', min_stock: 100 }
+      ];
+
+      stockMovements = [
+        { id: 'mov_1', item_id: 'stk_1', item_name: 'Cotton Poplin Fabric (White)', category: 'Fabric', unit: 'Meters', type: 'IN', quantity: 1200, date: yesterday, timestamp: yest8am, note: 'Supplier Textile Mill Batch #104' },
+        { id: 'mov_2', item_id: 'stk_1', item_name: 'Cotton Poplin Fabric (White)', category: 'Fabric', unit: 'Meters', type: 'OUT', quantity: 450, date: today, timestamp: today815am, note: 'Issued to Cutting Table #1 (Order #PO-88)' },
+        { id: 'mov_3', item_id: 'stk_2', item_name: 'Indigo Denim Roll (12 oz)', category: 'Fabric', unit: 'Meters', type: 'IN', quantity: 500, date: yesterday, timestamp: yest8am, note: 'Opening Mill Delivery' },
+        { id: 'mov_4', item_id: 'stk_2', item_name: 'Indigo Denim Roll (12 oz)', category: 'Fabric', unit: 'Meters', type: 'OUT', quantity: 390, date: today, timestamp: today830am, note: 'Issued to Cutting Table #2 (Low Stock Alert Demo)' },
+        { id: 'mov_5', item_id: 'stk_3', item_name: 'Polyester Sewing Thread 40/2', category: 'Thread', unit: 'Cones', type: 'IN', quantity: 300, date: yesterday, timestamp: yest810am, note: 'Thread Supplier Invoice #552' },
+        { id: 'mov_6', item_id: 'stk_3', item_name: 'Polyester Sewing Thread 40/2', category: 'Thread', unit: 'Cones', type: 'OUT', quantity: 95, date: today, timestamp: today830am, note: 'Issued to Sewing Line A & B' },
+        { id: 'mov_7', item_id: 'stk_4', item_name: 'YKK Metal Zippers 7-inch', category: 'Trims', unit: 'Pcs', type: 'IN', quantity: 1500, date: yesterday, timestamp: yest810am, note: 'Trim Store Batch #19' },
+        { id: 'mov_8', item_id: 'stk_4', item_name: 'YKK Metal Zippers 7-inch', category: 'Trims', unit: 'Pcs', type: 'OUT', quantity: 1120, date: today, timestamp: today1pm, note: 'Issued to Jacket & Denim Line (Low Stock Alert Demo)' },
+        { id: 'mov_9', item_id: 'stk_5', item_name: 'Main Woven Brand & Care Labels', category: 'Trims', unit: 'Pcs', type: 'IN', quantity: 4000, date: yesterday, timestamp: yest8am, note: 'Accessories Supplier Lot #08' },
+        { id: 'mov_10', item_id: 'stk_5', item_name: 'Main Woven Brand & Care Labels', category: 'Trims', unit: 'Pcs', type: 'OUT', quantity: 1200, date: today, timestamp: today830am, note: 'Issued to Sewing Line 1' },
+        { id: 'mov_11', item_id: 'stk_6', item_name: 'Self-Adhesive Garment Polybags', category: 'Packaging', unit: 'Pcs', type: 'IN', quantity: 2000, date: yesterday, timestamp: yest8am, note: 'Packaging Supplier Delivery' },
+        { id: 'mov_12', item_id: 'stk_6', item_name: 'Self-Adhesive Garment Polybags', category: 'Packaging', unit: 'Pcs', type: 'OUT', quantity: 650, date: today, timestamp: today1pm, note: 'Issued to Packing Section' },
+        { id: 'mov_13', item_id: 'stk_7', item_name: 'Export Men Casual Shirt (Finished)', category: 'Finished Garments', unit: 'Pcs', type: 'IN', quantity: 620, date: today, timestamp: today1pm, note: 'Received from QC & Packing Line' },
+        { id: 'mov_14', item_id: 'stk_7', item_name: 'Export Men Casual Shirt (Finished)', category: 'Finished Garments', unit: 'Pcs', type: 'OUT', quantity: 200, date: today, timestamp: today1pm, note: 'Dispatched Carton Lot #1' }
+      ];
+
+      saveAllToLocalStorage();
+    }
+
+    function saveAllToLocalStorage() {
+      localStorage.setItem(STORAGE_KEYS.EMPLOYEES, JSON.stringify(employees));
+      localStorage.setItem(STORAGE_KEYS.ATTENDANCE, JSON.stringify(attendanceLogs));
+      localStorage.setItem(STORAGE_KEYS.STOCK_ITEMS, JSON.stringify(stockItems));
+      localStorage.setItem(STORAGE_KEYS.STOCK_MOVEMENTS, JSON.stringify(stockMovements));
+    }
+
+    function loadFromLocalStorage() {
+      const empRaw = localStorage.getItem(STORAGE_KEYS.EMPLOYEES);
+      const attRaw = localStorage.getItem(STORAGE_KEYS.ATTENDANCE);
+      const stkRaw = localStorage.getItem(STORAGE_KEYS.STOCK_ITEMS);
+      const movRaw = localStorage.getItem(STORAGE_KEYS.STOCK_MOVEMENTS);
+
+      if (!empRaw || !stkRaw) {
+        seedDefaultFactoryData();
+      } else {
+        try {
+          employees = JSON.parse(empRaw) || [];
+          attendanceLogs = JSON.parse(attRaw) || [];
+          stockItems = JSON.parse(stkRaw) || [];
+          stockMovements = JSON.parse(movRaw) || [];
+        } catch (e) {
+          seedDefaultFactoryData();
+        }
+      }
+    }
+
+    /*************************************************************************
+     * 5. SUPABASE CLOUD INITIALIZATION & SYNC
+     *************************************************************************/
+    async function initSupabaseConnection() {
+      const url = localStorage.getItem(STORAGE_KEYS.SB_URL) || '';
+      const key = localStorage.getItem(STORAGE_KEYS.SB_KEY) || '';
+
+      document.getElementById('sbUrlInput').value = url;
+      document.getElementById('sbKeyInput').value = key;
+
+      if (url && key && window.supabase) {
+        try {
+          supabaseClient = window.supabase.createClient(url, key);
+          // Test fetching from employees table
+          const { data: empData, error: empErr } = await supabaseClient.from('employees').select('*').order('emp_code', { ascending: true });
+          if (empErr) throw empErr;
+
+          const { data: attData } = await supabaseClient.from('attendance_logs').select('*').order('time_in', { ascending: false });
+          const { data: stkData } = await supabaseClient.from('stock_items').select('*');
+          const { data: movData } = await supabaseClient.from('stock_movements').select('*').order('timestamp', { ascending: false });
+
+          if (empData && empData.length > 0) employees = empData;
+          if (attData) attendanceLogs = attData;
+          if (stkData && stkData.length > 0) stockItems = stkData;
+          if (movData) stockMovements = movData;
+
+          saveAllToLocalStorage();
+          isCloudConnected = true;
+          updateCloudBadgeUI(true);
+          refreshAllViews();
+        } catch (err) {
+          console.warn('Supabase fallback to LocalStorage:', err.message);
+          isCloudConnected = false;
+          updateCloudBadgeUI(false);
+        }
+      } else {
+        isCloudConnected = false;
+        updateCloudBadgeUI(false);
+      }
+    }
+
+    function updateCloudBadgeUI(connected) {
+      const badge = document.getElementById('cloudStatusBadge');
+      const dot = document.getElementById('cloudStatusDot');
+      const text = document.getElementById('cloudStatusText');
+
+      if (connected) {
+        badge.className = 'flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold border transition cursor-pointer bg-emerald-500/15 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25';
+        dot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-ping';
+        text.textContent = 'Supabase Cloud Connected';
+      } else {
+        badge.className = 'flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold border transition cursor-pointer bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/20';
+        dot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-pulse';
+        text.textContent = 'Local Demo Mode (Connect Supabase)';
+      }
+    }
+
+    async function handleSaveSupabaseConfig(e) {
+      e.preventDefault();
+      const url = document.getElementById('sbUrlInput').value.trim();
+      const key = document.getElementById('sbKeyInput').value.trim();
+
+      if (!url || !key) {
+        showToast('Please enter both Supabase URL and Anon Key.', 'warning');
+        return;
+      }
+
+      localStorage.setItem(STORAGE_KEYS.SB_URL, url);
+      localStorage.setItem(STORAGE_KEYS.SB_KEY, key);
+      showToast('Connecting to Supabase Cloud...', 'info');
+      await initSupabaseConnection();
+
+      if (isCloudConnected) {
+        showToast('Connected to Supabase Cloud Database!', 'success');
+      } else {
+        showToast('Could not verify tables. Make sure you ran the SQL Schema in Supabase SQL Editor.', 'warning');
+      }
+    }
+
+    function disconnectSupabaseConfig() {
+      localStorage.removeItem(STORAGE_KEYS.SB_URL);
+      localStorage.removeItem(STORAGE_KEYS.SB_KEY);
+      document.getElementById('sbUrlInput').value = '';
+      document.getElementById('sbKeyInput').value = '';
+      supabaseClient = null;
+      isCloudConnected = false;
+      updateCloudBadgeUI(false);
+      showToast('Switched to Local Browser Storage Mode.', 'info');
+    }
+
+    async function pushLocalDataToSupabase() {
+      if (!supabaseClient || !isCloudConnected) {
+        showToast('Connect your Supabase URL and Key first before pushing data.', 'warning');
+        return;
+      }
+      try {
+        showToast('Uploading local employees, attendance & stock to Supabase...', 'info');
+        if (employees.length > 0) await supabaseClient.from('employees').upsert(employees);
+        if (attendanceLogs.length > 0) await supabaseClient.from('attendance_logs').upsert(attendanceLogs);
+        if (stockItems.length > 0) await supabaseClient.from('stock_items').upsert(stockItems);
+        if (stockMovements.length > 0) await supabaseClient.from('stock_movements').upsert(stockMovements);
+        showToast('All local factory records synced to Supabase Cloud!', 'success');
+      } catch (err) {
+        showToast('Sync error: ' + err.message, 'error');
+      }
+    }
+
+    function copySqlSchemaToClipboard() {
+      const sqlText = document.getElementById('sqlSchemaCodeBlock').innerText;
+      const tempTextArea = document.createElement('textarea');
+      tempTextArea.value = sqlText;
+      document.body.appendChild(tempTextArea);
+      tempTextArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(tempTextArea);
+
+      const btnText = document.getElementById('copySqlBtnText');
+      btnText.textContent = 'Copied to Clipboard!';
+      showToast('SQL Schema copied! Paste it into your Supabase SQL Editor.', 'success');
+      setTimeout(() => {
+        btnText.textContent = 'Copy SQL Schema';
+      }, 2500);
+    }
+
+    /*************************************************************************
+     * 6. NAVIGATION & MANAGER PIN SECURITY
+     *************************************************************************/
+    function getManagerPin() {
+      return localStorage.getItem(STORAGE_KEYS.MANAGER_PIN) || '1234';
+    }
+
+    function updateManagerPin() {
+      const newPin = document.getElementById('customPinInput').value.trim();
+      if (!newPin || newPin.length < 4) {
+        showToast('Please enter at least a 4-digit PIN.', 'warning');
+        return;
+      }
+      localStorage.setItem(STORAGE_KEYS.MANAGER_PIN, newPin);
+      document.getElementById('customPinInput').value = '';
+      showToast(`Manager PIN updated to ${newPin}`, 'success');
+    }
+
+    function switchMainMode(mode) {
+      activeMainMode = mode;
+      const kioskView = document.getElementById('kioskView');
+      const managerView = document.getElementById('managerView');
+      const navKioskBtn = document.getElementById('navKioskBtn');
+      const navManagerBtn = document.getElementById('navManagerBtn');
+
+      if (mode === 'kiosk') {
+        kioskView.classList.remove('hidden');
+        managerView.classList.add('hidden');
+        navKioskBtn.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition bg-indigo-600 text-white shadow-xs';
+        navManagerBtn.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition text-slate-300 hover:text-white';
+        refreshAllViews();
+      } else {
+        kioskView.classList.add('hidden');
+        managerView.classList.remove('hidden');
+        navManagerBtn.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition bg-indigo-600 text-white shadow-xs';
+        navKioskBtn.className = 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition text-slate-300 hover:text-white';
+        switchManagerTab(activeManagerTab);
+      }
+    }
+
+    function requestManagerMode(targetTab = 'attendance') {
+      pendingManagerTabAfterUnlock = targetTab;
+      if (isManagerUnlocked) {
+        activeManagerTab = targetTab;
+        switchMainMode('manager');
+        return;
+      }
+      const modal = document.getElementById('pinModal');
+      const input = document.getElementById('pinInput');
+      document.getElementById('pinErrorMsg').classList.add('hidden');
+      input.value = '';
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      setTimeout(() => input.focus(), 100);
+    }
+
+    function openCloudSetupQuick() {
+      requestManagerMode('cloud');
+    }
+
+    function closePinModal() {
+      const modal = document.getElementById('pinModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function appendPinDigit(digit) {
+      const input = document.getElementById('pinInput');
+      if (input.value.length < 6) {
+        input.value += digit;
+      }
+    }
+
+    function clearPinInput() {
+      document.getElementById('pinInput').value = '';
+      document.getElementById('pinErrorMsg').classList.add('hidden');
+    }
+
+    function submitPinUnlock() {
+      const entered = document.getElementById('pinInput').value.trim();
+      if (entered === getManagerPin()) {
+        isManagerUnlocked = true;
+        document.getElementById('managerLockIcon').className = 'fa-solid fa-lock-open text-emerald-400 text-xs';
+        closePinModal();
+        activeManagerTab = pendingManagerTabAfterUnlock || 'attendance';
+        switchMainMode('manager');
+        showToast('Manager Dashboard Unlocked', 'success');
+      } else {
+        document.getElementById('pinErrorMsg').classList.remove('hidden');
+        document.getElementById('pinInput').value = '';
+      }
+    }
+
+    function lockManagerDashboard() {
+      isManagerUnlocked = false;
+      document.getElementById('managerLockIcon').className = 'fa-solid fa-lock text-xs';
+      switchMainMode('kiosk');
+      showToast('Manager Dashboard Locked. Gate Kiosk active.', 'info');
+    }
+
+    function switchManagerTab(tab) {
+      activeManagerTab = tab;
+      const views = {
+        attendance: document.getElementById('mgrSubViewAttendance'),
+        stock: document.getElementById('mgrSubViewStock'),
+        cloud: document.getElementById('mgrSubViewCloud')
+      };
+      const btns = {
+        attendance: document.getElementById('mgrTabBtnAttendance'),
+        stock: document.getElementById('mgrTabBtnStock'),
+        cloud: document.getElementById('mgrTabBtnCloud')
+      };
+
+      Object.keys(views).forEach(k => {
+        if (k === tab) {
+          views[k].classList.remove('hidden');
+          btns[k].className = 'mgr-tab-btn flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition bg-indigo-600 text-white shadow-xs';
+        } else {
+          views[k].classList.add('hidden');
+          btns[k].className = 'mgr-tab-btn flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition text-slate-600 hover:bg-slate-100';
+        }
+      });
+
+      refreshAllViews();
+      if (tab === 'stock') {
+        setTimeout(() => updateStockCharts(), 60);
+      }
+    }
+
+    /*************************************************************************
+     * 7. MODULE 1: FACTORY GATE ATTENDANCE KIOSK LOGIC
+     *************************************************************************/
+    function startLiveClock() {
+      const updateClock = () => {
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+        const dateStr = now.toLocaleDateString([], { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' });
+        const timeEl = document.getElementById('kioskTimeDisplay');
+        const dateEl = document.getElementById('kioskDateDisplay');
+        if (timeEl) timeEl.textContent = timeStr;
+        if (dateEl) dateEl.textContent = dateStr;
+      };
+      updateClock();
+      setInterval(updateClock, 1000);
+    }
+
+    // Find if an employee currently has an open punch (status === 'INSIDE' and time_out === null)
+    function getOpenAttendanceForEmployee(empId) {
+      return attendanceLogs.find(log => log.employee_id === empId && !log.time_out);
+    }
+
+    function setKioskDeptFilter(dept) {
+      selectedKioskDeptFilter = dept;
+      document.querySelectorAll('.kiosk-dept-btn').forEach(btn => {
+        if (btn.getAttribute('data-dept') === dept) {
+          btn.className = 'kiosk-dept-btn shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-600 text-white transition';
+        } else {
+          btn.className = 'kiosk-dept-btn shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition';
+        }
+      });
+      renderKioskEmployeeCards();
+    }
+
+    function clearKioskSearch() {
+      document.getElementById('kioskSearchInput').value = '';
+      renderKioskEmployeeCards();
+    }
+
+    function selectEmployeeForKiosk(empId) {
+      selectedKioskEmployeeId = empId;
+      document.getElementById('kioskEmployeeDropdown').value = empId || '';
+      renderKioskEmployeeCards();
+      renderSelectedWorkerPanel();
+    }
+
+    function selectEmployeeFromDropdown(empId) {
+      selectEmployeeForKiosk(empId);
+    }
+
+    function clearSelectedEmployee() {
+      selectEmployeeForKiosk('');
+    }
+
+    function renderKioskEmployeeCards() {
+      const searchVal = (document.getElementById('kioskSearchInput')?.value || '').trim().toLowerCase();
+      const clearBtn = document.getElementById('kioskClearSearchBtn');
+      if (clearBtn) {
+        clearBtn.classList.toggle('hidden', !searchVal);
+      }
+
+      // Populate quick select dropdown
+      const dropdown = document.getElementById('kioskEmployeeDropdown');
+      if (dropdown) {
+        dropdown.innerHTML = `<option value="">-- Quick Select Employee (${employees.length}) --</option>` +
+          employees.map(emp => {
+            const openLog = getOpenAttendanceForEmployee(emp.id);
+            const tag = openLog ? ' [INSIDE NOW]' : '';
+            return `<option value="${emp.id}" ${emp.id === selectedKioskEmployeeId ? 'selected' : ''}>${emp.emp_code} — ${emp.name} (${emp.department})${tag}</option>`;
+          }).join('');
+      }
+
+      const filtered = employees.filter(emp => {
+        const matchesDept = selectedKioskDeptFilter === 'ALL' || emp.department === selectedKioskDeptFilter;
+        const matchesSearch = !searchVal ||
+          emp.name.toLowerCase().includes(searchVal) ||
+          emp.emp_code.toLowerCase().includes(searchVal) ||
+          emp.department.toLowerCase().includes(searchVal);
+        return matchesDept && matchesSearch;
+      });
+
+      const grid = document.getElementById('kioskEmployeeGrid');
+      if (filtered.length === 0) {
+        grid.innerHTML = `
+          <div class="col-span-2 py-8 text-center text-slate-400 text-sm">
+            <i class="fa-solid fa-user-slash text-2xl mb-2 block"></i>
+            No matching employees found in this section.
+          </div>
+        `;
+        return;
+      }
+
+      grid.innerHTML = filtered.map(emp => {
+        const openLog = getOpenAttendanceForEmployee(emp.id);
+        const isSelected = emp.id === selectedKioskEmployeeId;
+
+        const cardBorder = isSelected
+          ? 'border-2 border-indigo-600 bg-indigo-50/70 ring-2 ring-indigo-500/20'
+          : openLog
+            ? 'border border-emerald-200 bg-emerald-50/30 hover:bg-emerald-50/60'
+            : 'border border-slate-200 bg-white hover:bg-slate-50';
+
+        const statusBadge = openLog
+          ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800">
+               <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span> INSIDE (${formatShortTimeAMPM(openLog.time_in)})
+             </span>`
+          : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-500">
+               OUT
+             </span>`;
+
+        return `
+          <div onclick="selectEmployeeForKiosk('${emp.id}')"
+            class="cursor-pointer rounded-2xl p-3.5 transition select-none flex items-center justify-between gap-3 ${cardBorder}">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-10 h-10 rounded-xl ${openLog ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700'} font-extrabold text-xs flex items-center justify-center shrink-0">
+                ${getInitials(emp.name)}
+              </div>
+              <div class="min-w-0">
+                <div class="flex items-center gap-1.5">
+                  <span class="font-mono text-[11px] font-bold text-slate-500">${emp.emp_code}</span>
+                  <span class="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 truncate">${emp.department}</span>
+                </div>
+                <p class="font-bold text-sm text-slate-900 truncate mt-0.5">${emp.name}</p>
+              </div>
+            </div>
+            <div class="shrink-0">
+              ${statusBadge}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderSelectedWorkerPanel() {
+      const noSel = document.getElementById('kioskNoSelectionState');
+      const activeSel = document.getElementById('kioskActiveSelectionState');
+      const box = document.getElementById('kioskSelectedWorkerBox');
+      const btnIn = document.getElementById('btnClockIn');
+      const btnOut = document.getElementById('btnClockOut');
+
+      const emp = employees.find(e => e.id === selectedKioskEmployeeId);
+      if (!emp) {
+        noSel.classList.remove('hidden');
+        activeSel.classList.add('hidden');
+        box.className = 'rounded-2xl p-4 bg-slate-50 border-2 border-dashed border-slate-300 text-center mb-5 transition';
+        btnIn.disabled = true;
+        btnOut.disabled = true;
+        return;
+      }
+
+      noSel.classList.add('hidden');
+      activeSel.classList.remove('hidden');
+
+      document.getElementById('selectedEmpAvatar').textContent = getInitials(emp.name);
+      document.getElementById('selectedEmpCode').textContent = emp.emp_code;
+      document.getElementById('selectedEmpDept').textContent = emp.department;
+      document.getElementById('selectedEmpName').textContent = emp.name;
+
+      const openLog = getOpenAttendanceForEmployee(emp.id);
+      const banner = document.getElementById('selectedEmpStatusBanner');
+
+      if (openLog) {
+        // Worker is ALREADY CLOCKED IN -> Enable CLOCK OUT, Disable duplicate CLOCK IN
+        box.className = 'rounded-2xl p-4 bg-emerald-50/70 border-2 border-emerald-400 mb-5 transition';
+        banner.className = 'mt-3 p-3 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-900 flex items-center justify-between border border-emerald-300';
+        banner.innerHTML = `
+          <span><i class="fa-solid fa-circle-check text-emerald-600 mr-1.5"></i> Currently INSIDE Factory since ${formatShortTimeAMPM(openLog.time_in)}</span>
+          <span class="font-mono bg-white px-2 py-0.5 rounded-md text-emerald-800">${formatElapsedDuration(openLog.time_in)} elapsed</span>
+        `;
+        btnIn.disabled = true;
+        btnOut.disabled = false;
+      } else {
+        // Worker is currently OUT -> Enable CLOCK IN, Disable CLOCK OUT
+        box.className = 'rounded-2xl p-4 bg-indigo-50/60 border-2 border-indigo-400 mb-5 transition';
+        banner.className = 'mt-3 p-3 rounded-xl text-xs font-bold bg-indigo-100 text-indigo-900 flex items-center justify-between border border-indigo-200';
+        banner.innerHTML = `
+          <span><i class="fa-solid fa-door-open text-indigo-600 mr-1.5"></i> Ready to Start Shift (Not Clocked In)</span>
+          <span class="text-[11px] uppercase tracking-wider px-2 py-0.5 rounded-md bg-white text-indigo-700">Tap Clock In</span>
+        `;
+        btnIn.disabled = false;
+        btnOut.disabled = true;
+      }
+    }
+
+    async function handleAttendancePunch(type) {
+      const emp = employees.find(e => e.id === selectedKioskEmployeeId);
+      if (!emp) {
+        showToast('Please select your name first!', 'warning');
+        return;
+      }
+
+      const nowIso = new Date().toISOString();
+      const todayStr = getTodayDateString();
+      const noteInput = document.getElementById('kioskPunchNote');
+      const noteVal = (noteInput.value || '').trim() || 'Regular Shift';
+      const openLog = getOpenAttendanceForEmployee(emp.id);
+
+      if (type === 'IN') {
+        if (openLog) {
+          showToast(`${emp.name} is already clocked IN since ${formatShortTimeAMPM(openLog.time_in)}!`, 'warning');
+          return;
+        }
+
+        const newLog = {
+          id: 'att_' + Date.now(),
+          employee_id: emp.id,
+          emp_code: emp.emp_code,
+          employee_name: emp.name,
+          department: emp.department,
+          date: todayStr,
+          time_in: nowIso,
+          time_out: null,
+          hours_worked: 0,
+          note: noteVal,
+          status: 'INSIDE'
+        };
+
+        attendanceLogs.unshift(newLog);
+        saveAllToLocalStorage();
+
+        if (isCloudConnected && supabaseClient) {
+          supabaseClient.from('attendance_logs').insert([newLog]).then(({ error }) => {
+            if (error) console.warn('Supabase insert error:', error.message);
+          });
+        }
+
+        noteInput.value = '';
+        showToast(`CLOCK IN Recorded: ${emp.name} (${emp.emp_code}) at ${formatShortTimeAMPM(nowIso)}`, 'success');
+        refreshAllViews();
+      } else if (type === 'OUT') {
+        if (!openLog) {
+          showToast(`${emp.name} is not currently clocked in!`, 'error');
+          return;
+        }
+
+        const hours = calculateHoursBetween(openLog.time_in, nowIso);
+        openLog.time_out = nowIso;
+        openLog.hours_worked = hours;
+        openLog.status = 'COMPLETED';
+        if (noteInput.value.trim()) {
+          openLog.note = noteInput.value.trim();
+        }
+
+        saveAllToLocalStorage();
+
+        if (isCloudConnected && supabaseClient) {
+          supabaseClient.from('attendance_logs')
+            .update({ time_out: openLog.time_out, hours_worked: openLog.hours_worked, status: 'COMPLETED', note: openLog.note })
+            .eq('id', openLog.id)
+            .then(({ error }) => {
+              if (error) console.warn('Supabase update error:', error.message);
+            });
+        }
+
+        noteInput.value = '';
+        showToast(`CLOCK OUT Recorded: ${emp.name} — Worked ${hours.toFixed(2)} hrs`, 'info');
+        refreshAllViews();
+      }
+    }
+
+    function renderKioskBoards() {
+      const todayStr = getTodayDateString();
+      document.getElementById('todayFeedDateLabel').textContent = `Date: ${todayStr}`;
+
+      const insideLogs = attendanceLogs.filter(l => !l.time_out);
+      const todayLogs = attendanceLogs.filter(l => l.date === todayStr);
+      const completedTodayCount = todayLogs.filter(l => l.time_out).length;
+
+      // Update Kiosk Top Counters
+      document.getElementById('kioskStatTotalStaff').textContent = employees.length;
+      document.getElementById('kioskStatInsideNow').textContent = insideLogs.length;
+      document.getElementById('kioskStatCompletedToday').textContent = completedTodayCount;
+      document.getElementById('insideBoardCountBadge').textContent = `${insideLogs.length} Inside`;
+
+      // Render Currently Inside List
+      const insideListEl = document.getElementById('currentlyInsideList');
+      if (insideLogs.length === 0) {
+        insideListEl.innerHTML = `
+          <div class="py-6 text-center text-slate-400 text-xs">
+            <i class="fa-solid fa-door-closed text-lg mb-1 block"></i>
+            No workers are currently clocked inside the factory.
+          </div>
+        `;
+      } else {
+        insideListEl.innerHTML = insideLogs.map(log => `
+          <div onclick="selectEmployeeForKiosk('${log.employee_id}')"
+            class="cursor-pointer p-2.5 rounded-xl border border-emerald-200 bg-emerald-50/50 hover:bg-emerald-100/60 transition flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <span class="w-8 h-8 rounded-lg bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                ${getInitials(log.employee_name)}
+              </span>
+              <div class="min-w-0">
+                <p class="text-xs font-extrabold text-slate-900 truncate">${log.employee_name} <span class="font-mono text-[10px] text-slate-500">(${log.emp_code})</span></p>
+                <p class="text-[11px] text-emerald-700 font-medium">${log.department} &bull; In at ${formatShortTimeAMPM(log.time_in)}</p>
+              </div>
+            </div>
+            <span class="shrink-0 text-[11px] font-mono font-bold px-2 py-1 rounded-lg bg-white text-emerald-800 border border-emerald-200">
+              ${formatElapsedDuration(log.time_in)}
+            </span>
+          </div>
+        `).join('');
+      }
+
+      // Render Today's Punches Table
+      const tbody = document.getElementById('kioskTodayTableBody');
+      if (todayLogs.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7" class="py-6 text-center text-slate-400 text-xs">No attendance punches recorded yet for today (${todayStr}).</td>
+          </tr>
+        `;
+      } else {
+        tbody.innerHTML = todayLogs.map(log => {
+          const isInside = !log.time_out;
+          return `
+            <tr class="hover:bg-slate-50">
+              <td class="py-2.5 px-3 font-mono font-bold text-xs text-slate-600">${log.emp_code}</td>
+              <td class="py-2.5 px-3 font-bold text-slate-900">${log.employee_name}</td>
+              <td class="py-2.5 px-3"><span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-xs font-semibold">${log.department}</span></td>
+              <td class="py-2.5 px-3 font-mono text-xs text-emerald-700 font-semibold">${formatTimeAMPM(log.time_in)}</td>
+              <td class="py-2.5 px-3 font-mono text-xs ${isInside ? 'text-slate-400' : 'text-rose-700 font-semibold'}">${isInside ? 'Active on Floor' : formatTimeAMPM(log.time_out)}</td>
+              <td class="py-2.5 px-3 font-mono font-bold text-xs">${isInside ? formatElapsedDuration(log.time_in) : log.hours_worked.toFixed(2) + ' hrs'}</td>
+              <td class="py-2.5 px-3">
+                ${isInside
+                  ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span> INSIDE</span>'
+                  : '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">OUT / DONE</span>'}
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+    }
+
+    /*************************************************************************
+     * 8. MODULE 2: ATTENDANCE ADMIN & MONTHLY PDF / CSV EXPORT
+     *************************************************************************/
+    async function handleAddEmployee(e) {
+      e.preventDefault();
+      const name = document.getElementById('newEmpName').value.trim();
+      const code = document.getElementById('newEmpCode').value.trim().toUpperCase();
+      const dept = document.getElementById('newEmpDept').value;
+      const role = document.getElementById('newEmpRole').value.trim() || 'Operator';
+
+      if (!name || !code) return;
+      if (employees.some(emp => emp.emp_code.toUpperCase() === code)) {
+        showToast(`Employee ID ${code} already exists!`, 'error');
+        return;
+      }
+
+      const newEmp = {
+        id: 'emp_' + Date.now(),
+        emp_code: code,
+        name,
+        department: dept,
+        role
+      };
+
+      employees.push(newEmp);
+      saveAllToLocalStorage();
+
+      if (isCloudConnected && supabaseClient) {
+        supabaseClient.from('employees').insert([newEmp]).then(({ error }) => {
+          if (error) console.warn('Supabase employee insert error:', error.message);
+        });
+      }
+
+      document.getElementById('newEmpName').value = '';
+      // Auto-suggest next employee code
+      const nextNum = employees.length + 101;
+      document.getElementById('newEmpCode').value = `EMP-${nextNum}`;
+      document.getElementById('newEmpRole').value = '';
+
+      showToast(`Added ${name} (${code}) to ${dept}`, 'success');
+      refreshAllViews();
+    }
+
+    function deleteEmployee(empId) {
+      const emp = employees.find(e => e.id === empId);
+      if (!emp) return;
+
+      openConfirmModal(
+        'Remove Employee',
+        `Are you sure you want to remove ${emp.name} (${emp.emp_code}) from the factory roster? Past attendance logs will remain intact.`,
+        () => {
+          employees = employees.filter(e => e.id !== empId);
+          if (selectedKioskEmployeeId === empId) selectedKioskEmployeeId = '';
+          saveAllToLocalStorage();
+
+          if (isCloudConnected && supabaseClient) {
+            supabaseClient.from('employees').delete().eq('id', empId).then(() => {});
+          }
+          showToast(`Removed ${emp.name} from roster.`, 'info');
+          refreshAllViews();
+        }
+      );
+    }
+
+    function renderAdminEmployeeRoster() {
+      document.getElementById('rosterCountBadge').textContent = `${employees.length} Staff`;
+
+      // Suggest next employee code if empty
+      const codeInput = document.getElementById('newEmpCode');
+      if (codeInput && !codeInput.value) {
+        codeInput.value = `EMP-${101 + employees.length}`;
+      }
+
+      // Populate Attendance Filter Employee Dropdown
+      const empSelect = document.getElementById('attFilterEmployee');
+      const currentVal = empSelect.value || 'ALL';
+      empSelect.innerHTML = `<option value="ALL">All Employees (${employees.length})</option>` +
+        employees.map(e => `<option value="${e.id}">${e.emp_code} — ${e.name}</option>`).join('');
+      empSelect.value = currentVal;
+
+      const tbody = document.getElementById('adminEmployeeRosterBody');
+      tbody.innerHTML = employees.map(emp => `
+        <tr class="hover:bg-slate-50">
+          <td class="py-2 px-3 font-mono font-bold text-xs text-indigo-700">${emp.emp_code}</td>
+          <td class="py-2 px-3 font-bold text-slate-900">${emp.name}</td>
+          <td class="py-2 px-3"><span class="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-xs font-semibold">${emp.department}</span></td>
+          <td class="py-2 px-3 text-slate-500 text-xs">${emp.role || 'Operator'}</td>
+          <td class="py-2 px-3 text-right">
+            <button onclick="deleteEmployee('${emp.id}')" class="text-rose-500 hover:text-rose-700 p-1" title="Remove Employee">
+              <i class="fa-regular fa-trash-can"></i>
+            </button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function getFilteredAttendanceLogs() {
+      const monthVal = document.getElementById('attFilterMonth')?.value || '';
+      const dateVal = document.getElementById('attFilterDate')?.value || '';
+      const empVal = document.getElementById('attFilterEmployee')?.value || 'ALL';
+      const deptVal = document.getElementById('attFilterDept')?.value || 'ALL';
+
+      return attendanceLogs.filter(log => {
+        const matchMonth = !monthVal || (log.date && log.date.startsWith(monthVal));
+        const matchDate = !dateVal || log.date === dateVal;
+        const matchEmp = empVal === 'ALL' || log.employee_id === empVal;
+        const matchDept = deptVal === 'ALL' || log.department === deptVal;
+        return matchMonth && matchDate && matchEmp && matchDept;
+      });
+    }
+
+    function resetAttendanceFilters() {
+      document.getElementById('attFilterMonth').value = getCurrentMonthString();
+      document.getElementById('attFilterDate').value = '';
+      document.getElementById('attFilterEmployee').value = 'ALL';
+      document.getElementById('attFilterDept').value = 'ALL';
+      renderAdminAttendanceTable();
+    }
+
+    function forceClockOutFromAdmin(logId) {
+      const log = attendanceLogs.find(l => l.id === logId);
+      if (!log || log.time_out) return;
+
+      const nowIso = new Date().toISOString();
+      log.time_out = nowIso;
+      log.hours_worked = calculateHoursBetween(log.time_in, nowIso);
+      log.status = 'COMPLETED';
+      saveAllToLocalStorage();
+
+      if (isCloudConnected && supabaseClient) {
+        supabaseClient.from('attendance_logs')
+          .update({ time_out: log.time_out, hours_worked: log.hours_worked, status: 'COMPLETED' })
+          .eq('id', log.id)
+          .then(() => {});
+      }
+
+      showToast(`Clocked out ${log.employee_name} (${log.hours_worked.toFixed(2)} hrs)`, 'success');
+      refreshAllViews();
+    }
+
+    function deleteAttendanceLog(logId) {
+      openConfirmModal('Delete Attendance Record', 'Remove this attendance punch permanently?', () => {
+        attendanceLogs = attendanceLogs.filter(l => l.id !== logId);
+        saveAllToLocalStorage();
+        if (isCloudConnected && supabaseClient) {
+          supabaseClient.from('attendance_logs').delete().eq('id', logId).then(() => {});
+        }
+        showToast('Attendance log deleted.', 'info');
+        refreshAllViews();
+      });
+    }
+
+    function renderAdminAttendanceTable() {
+      const todayStr = getTodayDateString();
+      const filtered = getFilteredAttendanceLogs();
+
+      // Update KPIs
+      const uniquePresentToday = new Set(attendanceLogs.filter(l => l.date === todayStr).map(l => l.employee_id)).size;
+      const insideCount = attendanceLogs.filter(l => !l.time_out).length;
+      const totalFilteredHours = filtered.reduce((acc, l) => acc + (Number(l.hours_worked) || 0), 0);
+
+      document.getElementById('admKpiTotalEmployees').textContent = employees.length;
+      document.getElementById('admKpiPresentToday').textContent = uniquePresentToday;
+      document.getElementById('admKpiCurrentlyInside').textContent = insideCount;
+      document.getElementById('admKpiFilteredHours').textContent = totalFilteredHours.toFixed(2);
+      document.getElementById('admKpiFilteredCountSub').textContent = `${filtered.length} attendance logs in filter`;
+
+      const tbody = document.getElementById('adminAttendanceTableBody');
+      if (filtered.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="9" class="py-8 text-center text-slate-400 text-sm">
+              No attendance records match the selected filters.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(log => {
+        const isInside = !log.time_out;
+        return `
+          <tr class="hover:bg-slate-50">
+            <td class="py-3 px-3.5 font-mono text-xs font-semibold text-slate-700">${log.date}</td>
+            <td class="py-3 px-3.5 font-mono text-xs font-bold text-indigo-700">${log.emp_code}</td>
+            <td class="py-3 px-3.5 font-bold text-slate-900">${log.employee_name}</td>
+            <td class="py-3 px-3.5"><span class="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-xs font-semibold">${log.department}</span></td>
+            <td class="py-3 px-3.5 font-mono text-xs text-emerald-700 font-semibold">${formatShortTimeAMPM(log.time_in)}</td>
+            <td class="py-3 px-3.5 font-mono text-xs ${isInside ? 'text-amber-600 font-bold' : 'text-rose-700 font-semibold'}">${isInside ? 'Still Inside' : formatShortTimeAMPM(log.time_out)}</td>
+            <td class="py-3 px-3.5 font-mono font-bold text-xs text-slate-900">${isInside ? formatElapsedDuration(log.time_in) : Number(log.hours_worked).toFixed(2) + ' hrs'}</td>
+            <td class="py-3 px-3.5">
+              ${isInside
+                ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">INSIDE NOW</span>'
+                : '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">COMPLETED</span>'}
+            </td>
+            <td class="py-3 px-3.5 text-right space-x-1">
+              ${isInside ? `<button onclick="forceClockOutFromAdmin('${log.id}')" class="px-2 py-1 rounded bg-rose-100 hover:bg-rose-200 text-rose-700 text-[11px] font-bold transition" title="Clock Out Now">Clock Out</button>` : ''}
+              <button onclick="deleteAttendanceLog('${log.id}')" class="text-slate-400 hover:text-rose-600 p-1" title="Delete Log">
+                <i class="fa-regular fa-trash-can"></i>
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // GENERATE PRINTABLE MONTHLY ATTENDANCE PDF REPORT (jsPDF + AutoTable)
+    function exportAttendancePDF() {
+      const filtered = getFilteredAttendanceLogs();
+      if (filtered.length === 0) {
+        showToast('No attendance records in the current filter to export.', 'warning');
+        return;
+      }
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF('p', 'mm', 'a4');
+
+      const monthVal = document.getElementById('attFilterMonth').value || 'All Months';
+      const deptVal = document.getElementById('attFilterDept').value || 'ALL';
+      const totalHours = filtered.reduce((acc, r) => acc + (Number(r.hours_worked) || 0), 0);
+
+      // Header Banner
+      doc.setFillColor(15, 23, 42);
+      doc.rect(0, 0, 210, 34, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text('STITCHFLOW GARMENT FACTORY — ATTENDANCE REPORT', 14, 15);
+
+      doc.setFontSize(9.5);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Period / Month: ${monthVal}   |   Section: ${deptVal}   |   Generated: ${new Date().toLocaleString()}`, 14, 23);
+      doc.text(`Total Punches: ${filtered.length}   |   Cumulative Hours Worked: ${totalHours.toFixed(2)} hrs`, 14, 29);
+
+      const tableRows = filtered.map(log => [
+        log.date,
+        log.emp_code,
+        log.employee_name,
+        log.department,
+        formatShortTimeAMPM(log.time_in),
+        log.time_out ? formatShortTimeAMPM(log.time_out) : 'INSIDE',
+        log.time_out ? Number(log.hours_worked).toFixed(2) + ' h' : formatElapsedDuration(log.time_in),
+        log.time_out ? 'Completed' : 'Inside Floor'
+      ]);
+
+      doc.autoTable({
+        startY: 40,
+        head: [['Date', 'Emp ID', 'Employee Name', 'Section', 'Time In', 'Time Out', 'Total Hrs', 'Status']],
+        body: tableRows,
+        theme: 'grid',
+        headStyles: { fillColor: [79, 70, 229], textColor: 255, fontStyle: 'bold', fontSize: 8.5 },
+        bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
+        alternateRowStyles: { fillColor: [248, 250, 252] }
+      });
+
+      const finalY = doc.lastAutoTable.finalY + 18;
+      doc.setTextColor(71, 85, 105);
+      doc.setFontSize(9);
+      doc.text('___________________________', 14, Math.min(275, finalY));
+      doc.text('Factory HR / Gate Supervisor', 14, Math.min(280, finalY + 5));
+
+      doc.text('___________________________', 135, Math.min(275, finalY));
+      doc.text('Authorized Factory Manager', 135, Math.min(280, finalY + 5));
+
+      doc.save(`Garment_Attendance_Report_${monthVal}.pdf`);
+      showToast('Monthly Attendance PDF Report downloaded!', 'success');
+    }
+
+    // EXPORT ATTENDANCE DATA SHEET TO CSV / EXCEL
+    function exportAttendanceCSV() {
+      const filtered = getFilteredAttendanceLogs();
+      if (filtered.length === 0) {
+        showToast('No attendance records to export.', 'warning');
+        return;
+      }
+
+      const headers = ['Date', 'Employee ID', 'Employee Name', 'Department', 'Time In', 'Time Out', 'Total Hours', 'Status', 'Shift Note'];
+      const rows = filtered.map(l => [
+        l.date,
+        l.emp_code,
+        `"${(l.employee_name || '').replace(/"/g, '""')}"`,
+        `"${(l.department || '').replace(/"/g, '""')}"`,
+        formatTimeAMPM(l.time_in),
+        l.time_out ? formatTimeAMPM(l.time_out) : 'INSIDE NOW',
+        l.time_out ? Number(l.hours_worked).toFixed(2) : '0.00',
+        l.status,
+        `"${(l.note || '').replace(/"/g, '""')}"`
+      ]);
+
+      downloadCsvFile([headers.join(','), ...rows.map(r => r.join(','))].join('\n'), `Garment_Attendance_Sheet_${getTodayDateString()}.csv`);
+      showToast('Attendance Excel/CSV Data Sheet downloaded!', 'success');
+    }
+
+
+    /*************************************************************************
+     * 9. MODULE 3: GARMENT STOCK MANAGEMENT & ANALYTICS
+     *************************************************************************/
+    // Compute Total IN, Total OUT, and Current Available Balance for each stock item
+    function getStockCalculatedSummary() {
+      return stockItems.map(item => {
+        const itemMoves = stockMovements.filter(m => m.item_id === item.id);
+        const totalIn = itemMoves
+          .filter(m => m.type === 'IN')
+          .reduce((sum, m) => sum + (Number(m.quantity) || 0), 0);
+        const totalOut = itemMoves
+          .filter(m => m.type === 'OUT')
+          .reduce((sum, m) => sum + (Number(m.quantity) || 0), 0);
+        const balance = Math.round((totalIn - totalOut) * 100) / 100;
+        const isLow = balance <= Number(item.min_stock);
+
+        return {
+          ...item,
+          totalIn: Math.round(totalIn * 100) / 100,
+          totalOut: Math.round(totalOut * 100) / 100,
+          balance,
+          isLow
+        };
+      });
+    }
+
+    function setStockMoveFormType(type) {
+      document.getElementById('stockMoveType').value = type;
+      const btnIn = document.getElementById('btnModeStockIn');
+      const btnOut = document.getElementById('btnModeStockOut');
+      const submitBtn = document.getElementById('stockMoveSubmitBtn');
+      const submitText = document.getElementById('stockMoveSubmitText');
+
+      if (type === 'IN') {
+        btnIn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition bg-emerald-600 text-white shadow-xs';
+        btnOut.className = 'px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition text-slate-600 hover:text-slate-900';
+        submitBtn.className = 'w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm transition flex items-center justify-center gap-2 shadow-xs';
+        submitText.textContent = 'Record Stock IN (+ Add to Inventory)';
+      } else {
+        btnOut.className = 'px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition bg-amber-600 text-white shadow-xs';
+        btnIn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition text-slate-600 hover:text-slate-900';
+        submitBtn.className = 'w-full py-3 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-sm transition flex items-center justify-center gap-2 shadow-xs';
+        submitText.textContent = 'Record Stock OUT (- Issue to Factory Floor)';
+      }
+      updateSelectedStockItemPreview();
+    }
+
+    function setQuickStockNote(text) {
+      document.getElementById('stockMoveNote').value = text;
+    }
+
+    function updateSelectedStockItemPreview() {
+      const itemId = document.getElementById('stockMoveItemSelect').value;
+      const banner = document.getElementById('stockMoveBalanceBanner');
+      const availText = document.getElementById('stockMoveAvailableText');
+      const unitHint = document.getElementById('stockMoveUnitHint');
+
+      if (!itemId) {
+        banner.classList.add('hidden');
+        unitHint.textContent = '';
+        return;
+      }
+
+      const summaryList = getStockCalculatedSummary();
+      const itemSummary = summaryList.find(s => s.id === itemId);
+      if (!itemSummary) return;
+
+      unitHint.textContent = `(${itemSummary.unit})`;
+      banner.classList.remove('hidden');
+      availText.textContent = `${itemSummary.balance} ${itemSummary.unit} (In: ${itemSummary.totalIn} | Out: ${itemSummary.totalOut})`;
+      availText.className = itemSummary.isLow
+        ? 'font-mono font-extrabold text-rose-600'
+        : 'font-mono font-extrabold text-emerald-700';
+    }
+
+    async function handleAddStockItem(e) {
+      e.preventDefault();
+      const name = document.getElementById('newItemName').value.trim();
+      const category = document.getElementById('newItemCategory').value;
+      const unit = document.getElementById('newItemUnit').value;
+      const minStock = Number(document.getElementById('newItemMinAlert').value) || 0;
+      const initialQty = Number(document.getElementById('newItemInitialQty').value) || 0;
+
+      if (!name) return;
+
+      const newItem = {
+        id: 'stk_' + Date.now(),
+        name,
+        category,
+        unit,
+        min_stock: minStock
+      };
+
+      stockItems.push(newItem);
+
+      if (isCloudConnected && supabaseClient) {
+        supabaseClient.from('stock_items').insert([newItem]).then(() => {});
+      }
+
+      // If opening stock > 0, record an initial IN movement so data sheets & charts match 100%
+      if (initialQty > 0) {
+        const initMove = {
+          id: 'mov_' + (Date.now() + 1),
+          item_id: newItem.id,
+          item_name: newItem.name,
+          category: newItem.category,
+          unit: newItem.unit,
+          type: 'IN',
+          quantity: initialQty,
+          date: getTodayDateString(),
+          timestamp: new Date().toISOString(),
+          note: 'Opening Stock Balance'
+        };
+        stockMovements.unshift(initMove);
+        if (isCloudConnected && supabaseClient) {
+          supabaseClient.from('stock_movements').insert([initMove]).then(() => {});
+        }
+      }
+
+      saveAllToLocalStorage();
+      document.getElementById('newItemName').value = '';
+      document.getElementById('newItemInitialQty').value = '0';
+
+      showToast(`Added inventory item: ${name} (${unit})`, 'success');
+      refreshAllViews();
+      updateStockCharts();
+    }
+
+    async function handleRecordStockMovement(e) {
+      e.preventDefault();
+      const type = document.getElementById('stockMoveType').value;
+      const itemId = document.getElementById('stockMoveItemSelect').value;
+      const qty = Number(document.getElementById('stockMoveQty').value);
+      const dateVal = document.getElementById('stockMoveDate').value || getTodayDateString();
+      const noteVal = document.getElementById('stockMoveNote').value.trim();
+
+      if (!itemId || isNaN(qty) || qty <= 0) {
+        showToast('Please select an item and enter a valid quantity > 0.', 'warning');
+        return;
+      }
+
+      const summaryList = getStockCalculatedSummary();
+      const itemSummary = summaryList.find(s => s.id === itemId);
+      if (!itemSummary) return;
+
+      // SMART VALIDATION: Prevent Stock Out if quantity exceeds available balance
+      if (type === 'OUT' && qty > itemSummary.balance) {
+        showToast(`Insufficient Stock! Available balance for ${itemSummary.name} is only ${itemSummary.balance} ${itemSummary.unit}.`, 'error');
+        return;
+      }
+
+      const newMove = {
+        id: 'mov_' + Date.now(),
+        item_id: itemSummary.id,
+        item_name: itemSummary.name,
+        category: itemSummary.category,
+        unit: itemSummary.unit,
+        type,
+        quantity: Math.round(qty * 100) / 100,
+        date: dateVal,
+        timestamp: new Date().toISOString(),
+        note: noteVal
+      };
+
+      stockMovements.unshift(newMove);
+      saveAllToLocalStorage();
+
+      if (isCloudConnected && supabaseClient) {
+        supabaseClient.from('stock_movements').insert([newMove]).then(({ error }) => {
+          if (error) console.warn('Supabase movement insert error:', error.message);
+        });
+      }
+
+      document.getElementById('stockMoveQty').value = '';
+      document.getElementById('stockMoveNote').value = '';
+
+      showToast(
+        type === 'IN'
+          ? `Stock IN (+${qty} ${itemSummary.unit}) added to ${itemSummary.name}`
+          : `Stock OUT (-${qty} ${itemSummary.unit}) issued for ${itemSummary.name}`,
+        type === 'IN' ? 'success' : 'info'
+      );
+
+      refreshAllViews();
+      updateSelectedStockItemPreview();
+      updateStockCharts();
+    }
+
+    function quickSelectStockMovement(itemId, type) {
+      setStockMoveFormType(type);
+      const select = document.getElementById('stockMoveItemSelect');
+      select.value = itemId;
+      updateSelectedStockItemPreview();
+      document.getElementById('stockMoveQty').focus();
+    }
+
+    function deleteStockItem(itemId) {
+      const item = stockItems.find(i => i.id === itemId);
+      if (!item) return;
+
+      openConfirmModal(
+        'Delete Inventory Item',
+        `Delete "${item.name}" and its movement history from the stock ledger?`,
+        () => {
+          stockItems = stockItems.filter(i => i.id !== itemId);
+          stockMovements = stockMovements.filter(m => m.item_id !== itemId);
+          saveAllToLocalStorage();
+
+          if (isCloudConnected && supabaseClient) {
+            supabaseClient.from('stock_items').delete().eq('id', itemId).then(() => {});
+            supabaseClient.from('stock_movements').delete().eq('item_id', itemId).then(() => {});
+          }
+          showToast(`Deleted item ${item.name}`, 'info');
+          refreshAllViews();
+          updateStockCharts();
+        }
+      );
+    }
+
+    function deleteStockMovement(movId) {
+      openConfirmModal('Delete Stock Transaction', 'Remove this stock In/Out entry? Item balance will recalculate automatically.', () => {
+        stockMovements = stockMovements.filter(m => m.id !== movId);
+        saveAllToLocalStorage();
+        if (isCloudConnected && supabaseClient) {
+          supabaseClient.from('stock_movements').delete().eq('id', movId).then(() => {});
+        }
+        showToast('Stock movement entry removed.', 'info');
+        refreshAllViews();
+        updateStockCharts();
+      });
+    }
+
+    function switchStockSheetTab(tab) {
+      const summaryContainer = document.getElementById('stockSummarySheetContainer');
+      const ledgerContainer = document.getElementById('stockLedgerSheetContainer');
+      const btnSummary = document.getElementById('tabBtnStockSummary');
+      const btnLedger = document.getElementById('tabBtnStockLedger');
+
+      if (tab === 'summary') {
+        summaryContainer.classList.remove('hidden');
+        ledgerContainer.classList.add('hidden');
+        btnSummary.className = 'px-4 py-2 rounded-lg text-xs font-extrabold transition bg-white text-indigo-600 shadow-xs';
+        btnLedger.className = 'px-4 py-2 rounded-lg text-xs font-extrabold transition text-slate-600 hover:text-slate-900';
+      } else {
+        summaryContainer.classList.add('hidden');
+        ledgerContainer.classList.remove('hidden');
+        btnLedger.className = 'px-4 py-2 rounded-lg text-xs font-extrabold transition bg-white text-indigo-600 shadow-xs';
+        btnSummary.className = 'px-4 py-2 rounded-lg text-xs font-extrabold transition text-slate-600 hover:text-slate-900';
+      }
+    }
+
+    function renderStockTables() {
+      const summaryList = getStockCalculatedSummary();
+      const searchVal = (document.getElementById('stockTableSearch')?.value || '').trim().toLowerCase();
+
+      // Update Stock KPIs
+      const inCount = stockMovements.filter(m => m.type === 'IN').length;
+      const outCount = stockMovements.filter(m => m.type === 'OUT').length;
+      const lowItems = summaryList.filter(s => s.isLow);
+
+      document.getElementById('stkKpiTotalItems').textContent = summaryList.length;
+      document.getElementById('stkKpiTotalInCount').textContent = inCount;
+      document.getElementById('stkKpiTotalOutCount').textContent = outCount;
+      document.getElementById('stkKpiLowStockCount').textContent = lowItems.length;
+
+      // Top navigation low stock badge
+      const navBadge = document.getElementById('navLowStockBadge');
+      if (lowItems.length > 0) {
+        navBadge.textContent = lowItems.length;
+        navBadge.classList.remove('hidden');
+      } else {
+        navBadge.classList.add('hidden');
+      }
+
+      // Populate Stock Item Select Dropdown
+      const itemSelect = document.getElementById('stockMoveItemSelect');
+      const prevSelected = itemSelect.value;
+      itemSelect.innerHTML = `<option value="">-- Choose Garment Item (${summaryList.length}) --</option>` +
+        summaryList.map(s => `<option value="${s.id}">${s.name} [${s.category}] — Avail: ${s.balance} ${s.unit}</option>`).join('');
+      if (prevSelected && summaryList.some(s => s.id === prevSelected)) {
+        itemSelect.value = prevSelected;
+      }
+
+      // Render Low Stock Watchlist
+      document.getElementById('watchlistCountLabel').textContent = `${lowItems.length} Alerts`;
+      const watchlistEl = document.getElementById('lowStockWatchlistContainer');
+      if (lowItems.length === 0) {
+        watchlistEl.innerHTML = `
+          <div class="py-3 text-center text-emerald-700 bg-emerald-50 rounded-xl text-xs font-semibold">
+            <i class="fa-solid fa-circle-check mr-1"></i> All stock items are above minimum alert levels.
+          </div>
+        `;
+      } else {
+        watchlistEl.innerHTML = lowItems.map(item => `
+          <div class="p-2 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-between gap-2 text-xs">
+            <div class="min-w-0">
+              <p class="font-bold text-rose-950 truncate">${item.name}</p>
+              <p class="text-[11px] text-rose-700">Bal: <strong>${item.balance} ${item.unit}</strong> (Min: ${item.min_stock})</p>
+            </div>
+            <button onclick="quickSelectStockMovement('${item.id}', 'IN')"
+              class="shrink-0 px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-[11px] transition">
+              + Restock
+            </button>
+          </div>
+        `).join('');
+      }
+
+      // Filter & Render Tab 1: Item Summary Sheet
+      const filteredSummary = summaryList.filter(s =>
+        !searchVal ||
+        s.name.toLowerCase().includes(searchVal) ||
+        s.category.toLowerCase().includes(searchVal)
+      );
+
+      const summaryBody = document.getElementById('stockSummaryTableBody');
+      summaryBody.innerHTML = filteredSummary.map(s => `
+        <tr class="hover:bg-slate-50">
+          <td class="py-3 px-3.5 font-bold text-slate-900">${s.name}</td>
+          <td class="py-3 px-3.5"><span class="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-xs font-semibold">${s.category}</span></td>
+          <td class="py-3 px-3.5 text-xs font-semibold text-slate-500">${s.unit}</td>
+          <td class="py-3 px-3.5 font-mono font-bold text-emerald-700 bg-emerald-50/30">+${s.totalIn}</td>
+          <td class="py-3 px-3.5 font-mono font-bold text-amber-700 bg-amber-50/30">-${s.totalOut}</td>
+          <td class="py-3 px-3.5 font-mono font-extrabold text-sm ${s.isLow ? 'text-rose-600 bg-rose-50/50' : 'text-indigo-950 bg-indigo-50/30'}">${s.balance} ${s.unit}</td>
+          <td class="py-3 px-3.5 font-mono text-xs text-slate-500">${s.min_stock}</td>
+          <td class="py-3 px-3.5">
+            ${s.isLow
+              ? '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-800"><i class="fa-solid fa-triangle-exclamation"></i> LOW STOCK</span>'
+              : '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">OK / IN STOCK</span>'}
+          </td>
+          <td class="py-3 px-3.5 text-right space-x-1 whitespace-nowrap">
+            <button onclick="quickSelectStockMovement('${s.id}', 'IN')" class="px-2 py-1 rounded bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold text-[11px] transition" title="Add Stock IN">+ In</button>
+            <button onclick="quickSelectStockMovement('${s.id}', 'OUT')" class="px-2 py-1 rounded bg-amber-100 hover:bg-amber-200 text-amber-800 font-bold text-[11px] transition" title="Issue Stock OUT">- Out</button>
+            <button onclick="deleteStockItem('${s.id}')" class="text-slate-400 hover:text-rose-600 p-1" title="Delete Item">
+              <i class="fa-regular fa-trash-can"></i>
+            </button>
+          </td>
+        </tr>
+      `).join('');
+
+      // Filter & Render Tab 2: Stock Movement Ledger
+      const filteredMovements = stockMovements.filter(m =>
+        !searchVal ||
+        (m.item_name || '').toLowerCase().includes(searchVal) ||
+        (m.category || '').toLowerCase().includes(searchVal) ||
+        (m.note || '').toLowerCase().includes(searchVal)
+      );
+
+      const ledgerBody = document.getElementById('stockLedgerTableBody');
+      if (filteredMovements.length === 0) {
+        ledgerBody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-slate-400 text-xs">No stock movements found.</td></tr>`;
+      } else {
+        ledgerBody.innerHTML = filteredMovements.map(m => {
+          const isIn = m.type === 'IN';
+          return `
+            <tr class="hover:bg-slate-50">
+              <td class="py-2.5 px-3.5 font-mono text-xs text-slate-600">${m.date} <span class="text-[11px] text-slate-400">${formatShortTimeAMPM(m.timestamp)}</span></td>
+              <td class="py-2.5 px-3.5 font-bold text-slate-900">${m.item_name}</td>
+              <td class="py-2.5 px-3.5"><span class="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-xs font-semibold">${m.category}</span></td>
+              <td class="py-2.5 px-3.5">
+                ${isIn
+                  ? '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800">STOCK IN (+)</span>'
+                  : '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800">STOCK OUT (-)</span>'}
+              </td>
+              <td class="py-2.5 px-3.5 font-mono font-bold text-xs ${isIn ? 'text-emerald-700' : 'text-amber-700'}">${isIn ? '+' : '-'}${m.quantity} ${m.unit}</td>
+              <td class="py-2.5 px-3.5 text-slate-600 text-xs">${m.note || '—'}</td>
+              <td class="py-2.5 px-3.5 text-right">
+                <button onclick="deleteStockMovement('${m.id}')" class="text-slate-400 hover:text-rose-600 p-1" title="Delete Entry">
+                  <i class="fa-regular fa-trash-can"></i>
+                </button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+    }
+
+    // INTERACTIVE CHART.JS RENDERING
+    function updateStockCharts() {
+      const summaryList = getStockCalculatedSummary();
+      const catFilter = document.getElementById('chartCategoryFilter')?.value || 'ALL';
+
+      const filteredForBar = summaryList.filter(s => catFilter === 'ALL' || s.category === catFilter);
+      const labels = filteredForBar.map(s => s.name.length > 20 ? s.name.substring(0, 18) + '…' : s.name);
+      const dataIn = filteredForBar.map(s => s.totalIn);
+      const dataOut = filteredForBar.map(s => s.totalOut);
+      const dataBal = filteredForBar.map(s => s.balance);
+
+      const barCtx = document.getElementById('stockBarChart')?.getContext('2d');
+      if (barCtx) {
+        if (stockBarChartInstance) stockBarChartInstance.destroy();
+        stockBarChartInstance = new Chart(barCtx, {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [
+              {
+                label: 'Total Stock IN (+)',
+                data: dataIn,
+                backgroundColor: 'rgba(16, 185, 129, 0.85)',
+                borderRadius: 6
+              },
+              {
+                label: 'Total Stock OUT (-)',
+                data: dataOut,
+                backgroundColor: 'rgba(245, 158, 11, 0.85)',
+                borderRadius: 6
+              },
+              {
+                label: 'Current Available Balance',
+                data: dataBal,
+                backgroundColor: 'rgba(79, 70, 229, 0.9)',
+                borderRadius: 6
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { position: 'top', labels: { boxWidth: 12, font: { family: 'Inter', size: 11, weight: '600' } } }
+            },
+            scales: {
+              x: { ticks: { font: { family: 'Inter', size: 10 } } },
+              y: { beginAtZero: true, ticks: { font: { family: 'JetBrains Mono', size: 10 } } }
+            }
+          }
+        });
+      }
+
+      // Doughnut Chart: Breakdown by Category count
+      const categories = ['Fabric', 'Thread', 'Trims', 'Packaging', 'Finished Garments'];
+      const catCounts = categories.map(cat => summaryList.filter(s => s.category === cat).length);
+
+      const doughnutCtx = document.getElementById('stockDoughnutChart')?.getContext('2d');
+      if (doughnutCtx) {
+        if (stockDoughnutChartInstance) stockDoughnutChartInstance.destroy();
+        stockDoughnutChartInstance = new Chart(doughnutCtx, {
+          type: 'doughnut',
+          data: {
+            labels: categories,
+            datasets: [{
+              data: catCounts,
+              backgroundColor: ['#4f46e5', '#10b981', '#f59e0b', '#06b6d4', '#ec4899'],
+              borderWidth: 2,
+              borderColor: '#ffffff'
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '62%',
+            plugins: {
+              legend: { position: 'right', labels: { boxWidth: 10, font: { family: 'Inter', size: 10, weight: '600' } } }
+            }
+          }
+        });
+      }
+    }
+
+    // STOCK PDF REPORT EXPORT (Summary Balance Table + Recent Movements)
+    function exportStockPDFReport() {
+      const summaryList = getStockCalculatedSummary();
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF('p', 'mm', 'a4');
+
+      doc.setFillColor(15, 23, 42);
+      doc.rect(0, 0, 210, 32, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(15);
+      doc.setFont('helvetica', 'bold');
+      doc.text('STITCHFLOW GARMENT FACTORY — STOCK & INVENTORY REPORT', 14, 14);
+
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Generated: ${new Date().toLocaleString()}   |   Total SKUs: ${summaryList.length}   |   Low Stock Alerts: ${summaryList.filter(s => s.isLow).length}`, 14, 23);
+
+      // Section 1: Item Summary Data Sheet
+      doc.setTextColor(15, 23, 42);
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.text('1. Item Stock Summary Sheet (Total IN, Total OUT & Current Balance)', 14, 40);
+
+      const summaryRows = summaryList.map(s => [
+        s.name,
+        s.category,
+        s.unit,
+        `+${s.totalIn}`,
+        `-${s.totalOut}`,
+        `${s.balance} ${s.unit}`,
+        s.min_stock,
+        s.isLow ? 'LOW STOCK ALERT' : 'OK'
+      ]);
+
+      doc.autoTable({
+        startY: 44,
+        head: [['Item Name', 'Category', 'Unit', 'Total IN', 'Total OUT', 'Current Balance', 'Min Alert', 'Status']],
+        body: summaryRows,
+        theme: 'grid',
+        headStyles: { fillColor: [79, 70, 229], textColor: 255, fontSize: 8 },
+        bodyStyles: { fontSize: 7.5 }
+      });
+
+      // Section 2: Recent Stock Movements Ledger
+      const nextY = doc.lastAutoTable.finalY + 10;
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.text('2. Chronological Stock Movement Ledger (Recent In / Out Transactions)', 14, nextY);
+
+      const moveRows = stockMovements.slice(0, 30).map(m => [
+        m.date,
+        m.item_name,
+        m.category,
+        m.type === 'IN' ? 'STOCK IN (+)' : 'STOCK OUT (-)',
+        `${m.type === 'IN' ? '+' : '-'}${m.quantity} ${m.unit}`,
+        m.note || ''
+      ]);
+
+      doc.autoTable({
+        startY: nextY + 4,
+        head: [['Date', 'Item Name', 'Category', 'Movement', 'Quantity', 'Reference / Production Note']],
+        body: moveRows,
+        theme: 'striped',
+        headStyles: { fillColor: [16, 185, 129], textColor: 255, fontSize: 8 },
+        bodyStyles: { fontSize: 7.5 }
+      });
+
+      doc.save(`Garment_Factory_Stock_Report_${getTodayDateString()}.pdf`);
+      showToast('Complete Stock PDF Report downloaded!', 'success');
+    }
+
+    // EXPORT STOCK SUMMARY DATA SHEET (CSV / EXCEL)
+    function exportStockSummaryCSV() {
+      const summaryList = getStockCalculatedSummary();
+      const headers = ['Item Name', 'Category', 'Unit', 'Total Stock IN', 'Total Stock OUT', 'Current Available Balance', 'Min Alert Level', 'Status'];
+      const rows = summaryList.map(s => [
+        `"${s.name.replace(/"/g, '""')}"`,
+        `"${s.category}"`,
+        s.unit,
+        s.totalIn,
+        s.totalOut,
+        s.balance,
+        s.min_stock,
+        s.isLow ? 'LOW STOCK ALERT' : 'OK'
+      ]);
+
+      downloadCsvFile([headers.join(','), ...rows.map(r => r.join(','))].join('\n'), `Garment_Stock_Summary_Sheet_${getTodayDateString()}.csv`);
+      showToast('Stock Summary Data Sheet (CSV/Excel) downloaded!', 'success');
+    }
+
+    // EXPORT STOCK MOVEMENT HISTORY LEDGER (CSV / EXCEL)
+    function exportStockMovementsCSV() {
+      const headers = ['Date', 'Timestamp', 'Item Name', 'Category', 'Type (IN/OUT)', 'Quantity', 'Unit', 'Reference Note'];
+      const rows = stockMovements.map(m => [
+        m.date,
+        formatTimeAMPM(m.timestamp),
+        `"${(m.item_name || '').replace(/"/g, '""')}"`,
+        `"${(m.category || '').replace(/"/g, '""')}"`,
+        m.type,
+        m.quantity,
+        m.unit,
+        `"${(m.note || '').replace(/"/g, '""')}"`
+      ]);
+
+      downloadCsvFile([headers.join(','), ...rows.map(r => r.join(','))].join('\n'), `Garment_Stock_Movements_Ledger_${getTodayDateString()}.csv`);
+      showToast('Stock Movement History (CSV/Excel) downloaded!', 'success');
+    }
+
+    function downloadCsvFile(csvContent, fileName) {
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.setAttribute('download', fileName);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    function resetDemoFactoryData() {
+      openConfirmModal(
+        'Reset Factory Demo Data',
+        'This will restore the default sample garment factory workers, attendance logs, and fabric/trim stock items. Continue?',
+        () => {
+          seedDefaultFactoryData();
+          selectedKioskEmployeeId = '';
+          refreshAllViews();
+          updateStockCharts();
+          showToast('Factory demo data restored to defaults!', 'success');
+        }
+      );
+    }
+
+    /*************************************************************************
+     * 10. MASTER VIEW REFRESH & INITIALIZATION ON LOAD
+     *************************************************************************/
+    function refreshAllViews() {
+      renderKioskEmployeeCards();
+      renderSelectedWorkerPanel();
+      renderKioskBoards();
+      renderAdminEmployeeRoster();
+      renderAdminAttendanceTable();
+      renderStockTables();
+    }
+
+    window.onload = function () {
+      // Load LocalStorage or seed realistic factory demo data
+      loadFromLocalStorage();
+
+      // Set default date inputs
+      document.getElementById('attFilterMonth').value = getCurrentMonthString();
+      document.getElementById('stockMoveDate').value = getTodayDateString();
+
+      // Allow Enter key inside PIN input
+      document.getElementById('pinInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') submitPinUnlock();
+      });
+
+      // Start live digital kiosk clock
+      startLiveClock();
+
+      // Render all modules
+      refreshAllViews();
+
+      // Initialize Supabase Cloud if keys exist
+      initSupabaseConnection();
+    };
+  </script>
+</body>
+</html>
