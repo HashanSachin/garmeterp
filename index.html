@@ -3020,6 +3020,8 @@ CREATE POLICY "Public factory access stock_movements" ON stock_movements FOR ALL
     window.onload = function () {
       // Load LocalStorage or seed realistic factory demo data
       loadFromLocalStorage();
+      localStorage.setItem('garment_sb_url', 'https://rpvfpkakqimkqlaaeoeg.supabase.co');
+    localStorage.setItem('garment_sb_key', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJwdmZwa2FrcWlta3FsYWFlb2VnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIzODk2NjUsImV4cCI6MjEwNzk2NTY2NX0.vajYV72Bi44pvb75GWwJ2elHBI5dtjpJA0aq7rV3PDc');
 
       // Set default date inputs
       document.getElementById('attFilterMonth').value = getCurrentMonthString();
